@@ -132,13 +132,10 @@ class BPEPreTokenizer:
                 chunk = mm[start:end].decode("utf-8")
                 pieces = self.special_split_regex.split(chunk)
                 for piece in pieces:
-                    if not piece:
+                    if not piece or piece in self.special_tokens:
                         continue
-                    if piece in self.special_tokens:
-                        match_details[set_key(piece)] += 1
-                    else:
-                        for match in self.bpe_regex.finditer(piece):
-                            match_details[set_key(match.group())] += 1
+                    for match in self.bpe_regex.finditer(piece):
+                        match_details[set_key(match.group())] += 1
         return match_details
 
 
