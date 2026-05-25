@@ -1,0 +1,18 @@
+Pretokenization:
+- Input: we are given a large text that we will ingest. 
+- Output: Corpus.  collecting raw bytes of words and their count.
+- Consideration: 
+    Dont use term token here. This is a step before tokenization.
+- Algorithm:
+    Goal is to take the words are encode them into bytes.
+    1. We use 2 regexes, one to scan for spl tokens, and another for text.
+    * <!endoftext!> as a  special token, which means that
+the preceding and following texts are unrelated.
+    * it is a boundary marker that the sequence ends here. 
+    * It is needed because otherwise the model will be confused. The model flushes the hidden-state when it see this token.
+    2. for each word we will see something like
+        low {[108,111, 119]:4},
+    3. I dont understand how ordering lost is recovered.
+    4. We get byte codes for  each word and count. This is calledour corpus (or pre_tokens).
+
+BPE_tokenization
