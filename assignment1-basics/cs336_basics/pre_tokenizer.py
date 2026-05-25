@@ -8,8 +8,8 @@ import mmap
 from multiprocessing import Pool, current_process
 from collections import Counter, defaultdict
 
-OUT="../out"
-IN="../data"
+OUT= "./out"
+IN= "./data"
 
 def print_time(fn, elapsed):
     hr, remainder  = divmod(elapsed, 3600)
@@ -88,6 +88,12 @@ class BPEPreTokenizer:
         """One Counter key per pretoken: tuple of single-character strings."""
         return tuple(text)
 
+    @staticmethod
+    def pretoken_bkey(text: str) -> tuple[[int], ...]:
+        """One Counter key per pretoken: tuple of single-character strings."""
+        result = list(map(int, text.encode("utf-8")))
+        return tuple(result)
+
     def pre_tokenize_str(self, raw_string: str) -> Counter:
         match_details: Counter = Counter()
 
@@ -112,10 +118,13 @@ class BPEPreTokenizer:
         print(f"Task {x} {name} (PID: {pid}), start {start} end {end}")
 
     def pre_tokenize_chunk(self, args) -> Counter:
-        fname, inst, start, end = args
+        fname, inst, encode_it, start, end = args
 
-        self.log_pid(inst, start, end)
         match_details: Counter = Counter()
+        if encode_it:
+            set_key = self.pretoken_bkey
+        else:
+            set_key = self.pretoken_key
 
         # Open the file and memory-map it INSIDE the worker
         with open(fname, "rb") as f:
@@ -126,13 +135,14 @@ class BPEPreTokenizer:
                     if not piece:
                         continue
                     if piece in self.special_tokens:
-                        match_details[self.pretoken_key(piece)] += 1
+                        match_details[set_key(piece)] += 1
                     else:
                         for match in self.bpe_regex.finditer(piece):
-                            match_details[self.pretoken_key(match.group())] += 1
+                            match_details[set_key(match.group())] += 1
         return match_details
 
-    def pre_tokenize_file(self, fname: str):
+
+    def pre_tokenize_file(self, fname: str, encode_it:bool):
         start_time = time.perf_counter()  # Before
         num_processes = 4
         with open(fname, "rb") as f:
@@ -141,8 +151,9 @@ class BPEPreTokenizer:
         f.close()
         args = []
 
-        for i in range(num_processes):
-            arg = (fname, i, boundaries[i], boundaries[i+1])
+        for i in range(len(boundaries) - 1):
+            arg = (fname, i, encode_it,
+                   boundaries[i], boundaries[i+1])
             args.append(arg)
 
         with Pool() as pool:
@@ -151,8 +162,6 @@ class BPEPreTokenizer:
 
         end_time = time.perf_counter()    # After
         print_time("PRE_TOKENIZE", end_time - start_time)
-        out_file = self.write_pre_tokens(pre_tokens, "pkl", fname)
-        print(f"Wrote {out_file} pkl file for pre_tokens")
 
         return pre_tokens
 
@@ -162,20 +171,19 @@ class BPEPreTokenizer:
         for item, count in first_10:
             print(f"{item}: {count}")
 
-    def write_pre_tokens(self, pre_tokens, format:str, fname: str):
+    def write_pre_tokens(self, pre_tokens, ftype:str, fname: str):
 
         from pathlib import Path
         path_obj = Path(fname)
         out_fname = Path(OUT) / f"{path_obj.stem}.csv"
-        if format in ("csv", "both"):
+        if ftype in ("csv", "both"):
             out_fname.parent.mkdir(parents=True, exist_ok=True)
             with open(out_fname, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Item', 'Count']) # Header
                 writer.writerows(pre_tokens.items())
 
-        if format in ("pkl", "both"):
-            # Save to file
+        if ftype in ("pkl", "both"):
             # Create a new filename based on the input
             out_fname = Path(OUT) / f"{path_obj.stem}.pkl"
             out_fname.parent.mkdir(parents=True, exist_ok=True)
@@ -188,5 +196,6 @@ if __name__ == "__main__":
     pretokenizer = BPEPreTokenizer(special_tokens=["<|endoftext|>"])
     # run with file
     fname = "./data/test_samples.txt"
-    pre_tokens = pretokenizer.pre_tokenize_file(fname)
+    pre_tokens = pretokenizer.pre_tokenize_file(
+                            fname, encode_it=True)
     pretokenizer.show_pre_tokens(pre_tokens)
