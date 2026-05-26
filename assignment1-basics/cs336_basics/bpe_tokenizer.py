@@ -1,4 +1,4 @@
-import os
+import os, time
 from collections.abc import Iterable
 from typing import Counter
 from abc import ABC
@@ -18,7 +18,7 @@ class Tokenizer(ABC):
         raise NotImplementedError
 
 def merge2(word_ids: list[int],
-          pair: tuple[int, int], new_id: int) -> list[int]:
+            pair: tuple[int, int], new_id: int) -> list[int]:
     new_word_ids = []
     i = 0
 
@@ -26,8 +26,8 @@ def merge2(word_ids: list[int],
         # Check if the current element and the next element
         # match our winning pair
         if i < len(word_ids) - 1\
-             and word_ids[i] == pair[0]\
-             and word_ids[i+1] == pair[1]:
+            and word_ids[i] == pair[0]\
+            and word_ids[i+1] == pair[1]:
             new_word_ids.append(new_id)
             i += 2  # Skip both elements as they are now merged!
         else:
@@ -57,6 +57,7 @@ def merge(word_ids: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
             read += 1
     del idx[write:]
     return word_ids
+
 @dataclass(frozen=True)
 class BPETokenizerParams:
     """All you need to specify a BPETokenizer."""
@@ -118,14 +119,14 @@ class BPETokenizer(Tokenizer):
         This function implements the logic for encoding a single token in a BPE tokenizer.
         it is rank based BPE. Instead of looping all merges,
         we only consider the best pair at each step.
-        TODO: understand better - rank is freq of word. This algo improves from O(merges) 
+        TODO: understand better - rank is freq of word. This algo improves from O(merges)
         to O(vocab)
         """
         indices = []
         for match in self.bpe_regex.finditer(piece):
             token_str = match.group()
             token_indices = [self.byte_to_token_id[b] for b in token_str.encode("utf-8")]
-            
+
             while len(token_indices) >= 2:
             # Find the adjacent pair with the lowest merge rank
                 best_pair = None
@@ -136,11 +137,14 @@ class BPETokenizer(Tokenizer):
                     if rank is not None and rank < best_rank:
                         best_rank = rank
                         best_pair = pair
-                    
+
+                if best_pair is None:
+                    break
+
                 # Merge the best pair
                 token_indices = merge(token_indices, best_pair, best_rank)
-            
-        indices.extend(token_indices)
+
+            indices.extend(token_indices)
         return indices
 
     def encode(self, string: str) -> list[int]:
@@ -209,58 +213,118 @@ def train_bpe_on_byte_corpus(pre_tokens: Counter, params:BPETokenizerParams, nex
     next_token_id += 1
 
     return next_token_id, pre_tokens
-    
-def train_bpe_on_corpus(pre_tokens: Counter,
-                        num_merges: int) -> BPETokenizerParams:
 
-    # pre_tokens are already utf-encoded. Just get the index
+def train_bpe_on_corpus(pre_tokens: Counter,
+                        num_merges: int,
+                        min_pair_count: int = 1,
+                        verbose: bool = False) -> BPETokenizerParams:
+    """
+    Train BPE tokenizer on a corpus.
+
+    Args:
+        pre_tokens: Counter of pre-tokenized words
+        num_merges: Number of merge operations to perform
+        min_pair_count: Skip merging pairs with count below this threshold (default: 1)
+        verbose: Print progress information (default: False)
+
+    Returns:
+        BPETokenizerParams with trained vocab and merges
+    """
     # index1, index2 => merged index
     merges: dict[tuple[int, int], int] = {}
     # index -> bytes
     vocab: dict[int, bytes] = {x: bytes([x]) for x in range(256)}
 
+    # Convert pre_tokens Counter to structures for fast updates
+    # words: list of lists representing token sequences
+    words = [list(word) for word in pre_tokens.keys()]
+    frequencies = list(pre_tokens.values())
+
+    # pair_counts: map from (t1, t2) to total frequency in corpus
+    pair_counts = defaultdict(int)
+    # pair_to_words: map from (t1, t2) to set of word indices that contain the pair
+    pair_to_words = defaultdict(set)
+
+    for w_idx, (word, freq) in enumerate(zip(words, frequencies)):
+        for pair in zip(word, word[1:]):
+            pair_counts[pair] += freq
+            pair_to_words[pair].add(w_idx)
+
     next_token_id = 256
     for m in range(num_merges):
-        # 1. Count pairs within word boundaries
-        counts = defaultdict(int)
-        for word_ids, freq in pre_tokens.items():
-            for pair in zip(word_ids, word_ids[1:]):
-                counts[pair] += freq
+        if not pair_counts:
+            break
 
-        if not counts:
-            break # No more pairs left to merge
-
-        # 2. Pick the winner, breaking ties lexicographically by byte values of the tokens
+        # Pick the winner, breaking ties lexicographically by byte values of the tokens
         best_pair = max(
-            counts,
-            key=lambda p: (counts[p], vocab[p[0]], vocab[p[1]])
+            pair_counts,
+            key=lambda p: (pair_counts[p], vocab[p[0]], vocab[p[1]])
         )
 
-        # 3. Register the new token
+        if pair_counts[best_pair] < min_pair_count:
+            break
+
+        # Register the new token
         merges[best_pair] = next_token_id
         vocab[next_token_id] = vocab[best_pair[0]] + vocab[best_pair[1]]
 
-        # 4. Update the corpus
-        next_pre_tokens = Counter()
-        for word_ids, freq in pre_tokens.items():
-            if best_pair[0] in word_ids and best_pair[1] in word_ids:
-                merged_ids = tuple(merge(list(word_ids), best_pair, next_token_id))
-                next_pre_tokens[merged_ids] += freq
-            else:
-                next_pre_tokens[word_ids] += freq
-        pre_tokens = next_pre_tokens
+        # Get all word indices that contain the best pair
+        # We copy the set because we will modify the mapping as we merge
+        matching_word_indices = list(pair_to_words[best_pair])
+
+        for w_idx in matching_word_indices:
+            word = words[w_idx]
+            freq = frequencies[w_idx]
+
+            old_pairs = list(zip(word, word[1:]))
+            # Merge the pair in the word list in-place
+            words[w_idx] = merge(word, best_pair, next_token_id)
+            new_pairs = list(zip(words[w_idx], words[w_idx][1:]))
+
+            old_pair_counts = Counter(old_pairs)
+            new_pair_counts = Counter(new_pairs)
+
+            # Update pair_counts and pair_to_words for decreased/removed pairs
+            for pair, old_count in old_pair_counts.items():
+                new_count = new_pair_counts.get(pair, 0)
+                if old_count > new_count:
+                    diff = old_count - new_count
+                    pair_counts[pair] -= diff * freq
+                    if pair_counts[pair] <= 0:
+                        del pair_counts[pair]
+                        if pair in pair_to_words:
+                            del pair_to_words[pair]
+                    if new_count == 0:
+                        pair_to_words[pair].discard(w_idx)
+
+            # Update pair_counts and pair_to_words for increased/added pairs
+            for pair, new_count in new_pair_counts.items():
+                old_count = old_pair_counts.get(pair, 0)
+                if new_count > old_count:
+                    diff = new_count - old_count
+                    pair_counts[pair] += diff * freq
+                    if old_count == 0:
+                        pair_to_words[pair].add(w_idx)
 
         next_token_id += 1
 
     return BPETokenizerParams(vocab=vocab, merges=merges)
 
+
 def bpe_tokenizer_fn(input_path, vocab_size, special_tokens):
+    print()
+    x_time = time.perf_counter()
     pretokenizer = BPEPreTokenizer(special_tokens)
     corpus = pretokenizer.pre_tokenize_file(input_path,
                                             encode_it=True)
 
     num_merges = vocab_size - 256 - len(special_tokens)
-    params = train_bpe_on_corpus(corpus, num_merges)
+
+    start_time = time.perf_counter()
+    params = train_bpe_on_corpus(corpus, num_merges, min_pair_count=1)
+    end_time = time.perf_counter()    # After
+    print_time("   TRAIN", end_time - start_time)
+    start_time = time.perf_counter()
 
     # Format merges as list of bytes tuples ordered by creation
     # need this for testing. eg. change  {(32, 116): 256} to [(' ', 'b'), ...]
@@ -275,6 +339,9 @@ def bpe_tokenizer_fn(input_path, vocab_size, special_tokens):
         vocab[next_id] = special_token.encode("utf-8")
         next_id += 1
 
+    end_time = time.perf_counter()    # After
+    print_time("  Format", end_time - start_time)
+    print_time("   Total", end_time - x_time)
     return vocab, merges_list
 
 
@@ -283,4 +350,4 @@ if __name__ == "__main__":
     owt_file = """./data/owt_train.txt"""
     samples_file = "./data/test_samples1.txt"
     tiny_stories_file = """../data/TinyStoriesV2-GPT4-train.txt"""
-    bpe_tokenizer_fn(samples_file, num_merges=3)
+    vocab, merges = bpe_tokenizer_fn(samples_file, vocab_size=259)

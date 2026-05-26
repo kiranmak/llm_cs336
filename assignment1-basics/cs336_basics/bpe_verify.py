@@ -2,9 +2,15 @@
 
 import time
 from collections import Counter
-from bpe_tokenizer import BPETokenizer, BPETokenizerParams, merge
-from bpe_tokenizer import train_bpe_on_corpus, bpe_tokenizer_fn, print_time
-from pre_tokenizer import load_pkl
+try:
+    from .bpe_tokenizer import BPETokenizer, BPETokenizerParams, merge
+    from .bpe_tokenizer import train_bpe_on_corpus, bpe_tokenizer_fn, print_time
+    from .pre_tokenizer import load_pkl
+except ImportError:
+    from bpe_tokenizer import BPETokenizer, BPETokenizerParams, merge
+    from bpe_tokenizer import train_bpe_on_corpus, bpe_tokenizer_fn, print_time
+    # pyrefly: ignore [missing-import]
+    from pre_tokenizer import load_pkl
 
 def _token_ids_to_bytes(word_ids: tuple[int, ...], vocab: dict[int, bytes]) -> bytes:
     return b"".join(vocab[i] for i in word_ids)
@@ -170,7 +176,7 @@ if __name__ == "__main__":
     #test_file = "test_samples.txt"
     # Option 1: Use one shot
     """
-    tiny_stories_file = """../data/TinyStoriesV2-GPT4-train.txt"""
+    tiny_stories_file = "../data/TinyStoriesV2-GPT4-train.txt"
     verify_and_create_corpus(tiny_stories_file, num_merges)
     """
     # Option 2: read pkl if it was already created

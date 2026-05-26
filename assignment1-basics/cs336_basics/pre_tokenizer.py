@@ -149,7 +149,7 @@ class BPEPreTokenizer:
 
         for i in range(len(boundaries) - 1):
             arg = (fname, i, encode_it,
-                   boundaries[i], boundaries[i+1])
+                  boundaries[i], boundaries[i+1])
             args.append(arg)
 
         with Pool() as pool:
@@ -157,7 +157,7 @@ class BPEPreTokenizer:
             pre_tokens = sum(results, Counter())
 
         end_time = time.perf_counter()    # After
-        print_time("PRE_TOKENIZE", end_time - start_time)
+        print_time("PRETOKEN", end_time - start_time)
 
         return pre_tokens
 
