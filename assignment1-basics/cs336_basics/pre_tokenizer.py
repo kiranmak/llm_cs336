@@ -91,8 +91,7 @@ class BPEPreTokenizer:
     @staticmethod
     def pretoken_bkey(text: str) -> tuple[[int], ...]:
         """One Counter key per pretoken: tuple of single-character strings."""
-        result = list(map(int, text.encode("utf-8")))
-        return tuple(result)
+        return tuple(text.encode("utf-8"))
 
     def pre_tokenize_str(self, raw_string: str) -> Counter:
         match_details: Counter = Counter()

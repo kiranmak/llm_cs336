@@ -559,7 +559,19 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    from cs336_basics.bpe_tokenizer import BPETokenizer, BPETokenizerParams
+
+    byte_to_id = {v: k for k, v in vocab.items()}
+    merges_dict = {}
+    new_id = len(vocab)
+    for f, s in merges:
+        f_id = byte_to_id[f]
+        s_id = byte_to_id[s]
+        merges_dict[(f_id, s_id)] = byte_to_id[f+s]
+        new_id += 1
+
+    params = BPETokenizerParams(vocab=vocab, merges=merges_dict)
+    return BPETokenizer(params, special_tokens=special_tokens)
 
 
 def run_train_bpe(
@@ -592,4 +604,4 @@ def run_train_bpe(
     from cs336_basics.bpe_tokenizer import bpe_tokenizer_fn
     
     vocab, merges = bpe_tokenizer_fn(input_path, vocab_size, special_tokens)
-    #raise NotImplementedError
+    return vocab, merges

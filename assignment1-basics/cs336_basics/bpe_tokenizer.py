@@ -17,10 +17,11 @@ class Tokenizer(ABC):
     def decode(self, indices: list[int]) -> str:
         raise NotImplementedError
 
-def merge(word_ids: list[int],
+def merge2(word_ids: list[int],
           pair: tuple[int, int], new_id: int) -> list[int]:
     new_word_ids = []
     i = 0
+
     while i < len(word_ids):
         # Check if the current element and the next element
         # match our winning pair
@@ -34,6 +35,28 @@ def merge(word_ids: list[int],
             i += 1
     return new_word_ids
 
+def merge(word_ids: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
+    """
+    Replace every non-overlapping occurrence of `pair` with `new_id`
+    in one left-to-right pass. Shrinks `indices` in place; no extra list.
+    """
+    n = len(word_ids)
+    if n < 2:
+        return word_ids
+    p0, p1 = pair
+    read = write = 0
+    idx = word_ids
+    while read < n:
+        if read + 1 < n and idx[read] == p0 and idx[read + 1] == p1:
+            idx[write] = new_id
+            write += 1
+            read += 2
+        else:
+            idx[write] = idx[read]
+            write += 1
+            read += 1
+    del idx[write:]
+    return word_ids
 @dataclass(frozen=True)
 class BPETokenizerParams:
     """All you need to specify a BPETokenizer."""
@@ -80,7 +103,7 @@ class BPETokenizer(Tokenizer):
             escaped_tokens = [regex.escape(t) for t in sorted_special_tokens]
             self.special_split_regex = regex.compile(f"({'|'.join(escaped_tokens)})")
 
-    def encode_piece(self, piece: str) -> list[int]:
+    def encode_piece2(self, piece: str) -> list[int]:
         indices = []
         for match in self.bpe_regex.finditer(piece):
             token_str = match.group()
@@ -88,6 +111,36 @@ class BPETokenizer(Tokenizer):
             for pair, new_index in self.params.merges.items():
                 token_indices = merge(token_indices, pair, new_index)
             indices.extend(token_indices)
+        return indices
+
+    def encode_piece(self, piece: str) -> list[int]:
+        """
+        This function implements the logic for encoding a single token in a BPE tokenizer.
+        it is rank based BPE. Instead of looping all merges,
+        we only consider the best pair at each step.
+        TODO: understand better - rank is freq of word. This algo improves from O(merges) 
+        to O(vocab)
+        """
+        indices = []
+        for match in self.bpe_regex.finditer(piece):
+            token_str = match.group()
+            token_indices = [self.byte_to_token_id[b] for b in token_str.encode("utf-8")]
+            
+            while len(token_indices) >= 2:
+            # Find the adjacent pair with the lowest merge rank
+                best_pair = None
+                best_rank = float('inf')
+                for i in range(len(token_indices) - 1):
+                    pair = (token_indices[i], token_indices[i+1])
+                    rank = self.params.merges.get(pair)
+                    if rank is not None and rank < best_rank:
+                        best_rank = rank
+                        best_pair = pair
+                    
+                # Merge the best pair
+                token_indices = merge(token_indices, best_pair, best_rank)
+            
+        indices.extend(token_indices)
         return indices
 
     def encode(self, string: str) -> list[int]:

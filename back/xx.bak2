@@ -1,0 +1,165 @@
+import os
+from typing import Counter
+import regex
+import time
+import datetime
+from abc import ABC
+from dataclasses import dataclass
+from collections import defaultdict, Counter
+from itertools import pairwise
+from pre_tokenizer import pre_tokenizer
+
+class Tokenizer(ABC):
+    """Abstract interface for a tokenizer."""
+    def encode(self, string: str) -> list[int]:
+        raise NotImplementedError
+
+    def decode(self, indices: list[int]) -> str:
+        raise NotImplementedError
+
+"""
+def merge(indices: list[int], pair: tuple[int, int], new_index: int) -> list[int]:
+    new_indices = []  # @inspect new_indices
+    i = 0  # @inspect i
+    while i < len(indices):
+        if (i + 1) < len(indices) and
+           indices[i] == pair[0] and indices[i + 1] == pair[1]:
+            new_indices.append(new_index)
+            i += 2
+        else:
+            new_indices.append(indices[i])
+            i += 1
+    return new_indices
+"""
+def merge(word_ids: list[int], pair: tuple[int, int],
+               new_id: int) -> list[int]:
+    new_word_ids = []
+    i = 0
+    while i < len(word_ids):
+        # Check if the current element and the next element
+        # match our winning pair
+        if i + 1 < len(word_ids) and
+           word_ids[i] == pair[0] and word_ids[i+1] == pair[1]:
+            new_word_ids.append(new_id)
+            i += 2  # Skip both elements because they are now merged!
+        else:
+            new_word_ids.append(word_ids[i])
+            i += 1
+    return new_word_ids
+
+@dataclass(frozen=True)
+class BPETokenizerParams:
+    """All you need to specify a BPETokenizer."""
+    vocab: dict[int, bytes]     # index -> bytes
+    merges: dict[tuple[int, int], int]  # index1,index2 -> new_index
+
+class BPETokenizer(Tokenizer):
+    """BPE tokenizer given a set of merges and a vocabulary."""
+    def __init__(self, params: BPETokenizerParams):
+        self.params = params
+
+    def encode(self, string: str) -> list[int]:
+        indices = list(string.encode("utf-8"))
+        # Note: this is a very slow implementation
+        for pair, new_index in self.params.merges.items():
+            indices = merge(indices, pair, new_index)
+        return indices
+
+    def decode(self, indices: list[int]) -> str:
+        bytes_list = list((self.params.vocab.get, indices))
+        string = b"".join(bytes_list).decode("utf-8")
+        return string
+
+def get_compression_ratio(string: str, indices: list[int]) -> float:
+    num_bytes = len(bytes(string, encoding="utf-8"))
+    num_tokens = len(indices)
+    return num_bytes / num_tokens
+
+
+def train_bpe(string: str, num_merges: int) -> BPETokenizerParams:
+    indices = list(string.encode("utf-8"))
+    # index1, index2 => merged index
+    merges: dict[tuple[int, int], int] = {}
+    # index -> bytes
+    vocab: dict[int, bytes] = {x: bytes([x]) for x in range(256)}
+
+    for i in range(num_merges):
+        # Count the number of occurrences of each pair of tokens
+        counts = count_adjacent_pairs(indices)  # @inspect counts @stepover
+
+        # Find the most common pair
+        pair = max(counts, key=counts.get)  # @inspect pair
+
+        # Merge that pair
+        new_index = 256 + i  # @inspect new_index
+        merges[pair] = new_index  # @inspect merges
+        vocab[new_index] = vocab[pair[0]] + vocab[pair[1]]  # @inspect vocab
+        indices = merge(indices, pair, new_index)  # @inspect indices @stepover
+
+    compression_ratio = get_compression_ratio(string, indices)  # @inspect compression_ratio
+
+    return BPETokenizerParams(vocab=vocab, merges=merges)
+
+def train_bpe_on_corpus(pre_tokens: Counter,
+                        num_merges: int) -> BPETokenizerParams:
+
+    # pre_tokens are already utf-encoded. Just get the index
+    # index1, index2 => merged index
+    merges: dict[tuple[int, int], int] = {}
+    # index -> bytes
+    vocab: dict[int, bytes] = {x: bytes([x]) for x in range(256)}
+
+    # Step 1: Represent Your Corpus as a List of Lists
+    pt_indices = {pt: list(pt) for pt in pre_tokens}
+
+    next_token_id = 256
+    for m in range(num_merges):
+        # 1. Count pairs within word boundaries
+        for word_ids, freq in pre_tokens:
+            for pair in zip(word_ids, word_ids[1:]):
+                counts[pair] += freq
+
+        if not counts:
+            break # No more pairs left to merge
+
+        # 2. Pick the winner
+        best_pair = max(counts, key=counts.get)
+
+        # 3. Register the new token
+        merges[best_pair] = next_token_id
+        vocab[next_token_id] = vocab[best_pair[0]] + vocab[best_pair[1]]
+
+        # 4. Update the corpus in place
+        pre_tokens = [merge(word_ids, best_pair, next_token_id)
+                        for word_ids in pre_tokens]
+
+        print(f"Round {m + 1}: Merged {best_pair} into {next_token_id}")
+        print(f"Updated Corpus: {pre_tokens}\n")
+
+        next_token_id += 1
+
+    return BPETokenizerParams( vocab=vocab, merges=merges,)
+
+def bpe_tokenizer(filename):
+    pre_tokens = pre_tokenizer(filename)
+    params = train_bpe_on_corpus(pre_tokens, num_merges=3)
+    tokenizer = BPETokenizer(params)
+
+if __name__ == "__main__":
+    small_file = "test_samples.txt"
+    tiny_file = "test_samples.txt"
+    large_file = """../data/owt_train.txt"""
+
+    #start_time = time.perf_counter()
+    #bpe_tokenizer(small_file)
+    #end_time = time.perf_counter()    # After
+    #readable_time = datetime.timedelta(seconds=(end_time - start_time))
+    #print(f"Elapsed time: {readable_time}")
+    # Initial Setup
+    corpus = [
+        ([108, 111], 3),       # "lo"
+        ([108, 111, 119],6),  # "low"
+        ([108, 111],2)        # "lo"
+    ]
+
+    params = train_bpe_on_corpus(corpus, num_merges=2)
