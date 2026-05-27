@@ -8,14 +8,14 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from tests.adapters import run_train_bpe
 from cs336_basics.pre_tokenizer import print_time
 
 DATA_PATH = PROJECT_ROOT / "data"
 OUT_PATH = PROJECT_ROOT / "out"
 OUT_PATH.mkdir(parents=True, exist_ok=True)
 
-def train_bpe_common(in_file, out_vocab_file, out_merges_file, vocab_size=50257, special_tokens=None):
+def train_bpe_common(in_file, out_vocab_file, out_merges_file, vocab_size=1000, special_tokens=None):
+    from tests.adapters import run_train_bpe
     from tests.common import gpt2_bytes_to_unicode
 
     if special_tokens is None:
@@ -66,6 +66,8 @@ def train_bpe_tinystories():
         in_file=DATA_PATH / "TinyStoriesV2-GPT4-train.txt",
         out_vocab_file=OUT_PATH / "TinyStories_vocab.json",
         out_merges_file=OUT_PATH / "TinyStories_merges.txt",
+        vocab_size=10000,
+        special_tokens=["<|endoftext|>"]
     )
 
 def train_bpe_expts_owt():
@@ -73,12 +75,14 @@ def train_bpe_expts_owt():
         in_file=DATA_PATH / "owt_train.txt",
         out_vocab_file=OUT_PATH / "owt_vocab.json",
         out_merges_file=OUT_PATH / "owt_merges.txt",
+        vocab_size=32000,
+        special_tokens=["<|endoftext|>"]
     )
 
 
 if __name__ == "__main__":
-    #print("---Training BPE on TinyStories...---")
-    #train_bpe_tinystories()
+    print("---Training BPE on TinyStories...---")
+    train_bpe_tinystories()
 
     print("\n---Training BPE on OpenWebText---")
     train_bpe_expts_owt()
