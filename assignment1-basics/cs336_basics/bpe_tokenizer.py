@@ -1,9 +1,17 @@
 import os, time
+import pathlib
+import sys
+import json
 from collections.abc import Iterable
 from typing import Counter
 from abc import ABC
 from dataclasses import dataclass
 from collections import defaultdict, Counter
+
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 try:
     from .pre_tokenizer import BPEPreTokenizer, print_time
 except ImportError:
@@ -161,6 +169,48 @@ class BPETokenizer(Tokenizer):
             else:
                 indices.extend(self.encode_piece(piece))
         return indices
+    @classmethod
+    def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
+        # Class method that constructs and returns a Tokenizer from a serialized vocabulary and list of merges
+        #  (in the same format that your BPE training code output) and (optionally) a list of special tokens.
+        from tests.common import gpt2_bytes_to_unicode
+
+        def token_str_to_bytes(token_str):
+            return bytes(gpt2_byte_decoder[token] for token in token_str)
+
+        gpt2_byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
+        with open(vocab_filepath) as vocab_f:
+            gpt2_vocab = json.load(vocab_f)
+
+        gpt2_bpe_merges = []
+        with open(merges_filepath) as f:
+            for line in f:
+                cleaned_line = line.rstrip()
+                if cleaned_line and len(cleaned_line.split(" ")) == 2:
+                    gpt2_bpe_merges.append(tuple(cleaned_line.split(" ")))
+
+        vocab = {}
+        for token_str, token_id in gpt2_vocab.items():
+            token_bytes = bytes(gpt2_byte_decoder[token] for token in token_str)
+            vocab[token_id] = token_bytes
+            # If any of the special tokens don't exist in the vocab, append them to the vocab.
+        if special_tokens:
+            for special_token in special_tokens:
+                byte_encoded_special_token = special_token.encode("utf-8")
+                if byte_encoded_special_token not in set(vocab.values()):
+                    vocab[len(vocab)] = byte_encoded_special_token
+
+        merges = {}
+        for merge_token_1, merge_token_2 in gpt2_bpe_merges:
+            id1 = gpt2_vocab.get(merge_token_1)
+            id2 = gpt2_vocab.get(merge_token_2)
+            id_new = gpt2_vocab.get(merge_token_1 + merge_token_2)
+            if id1 is None or id2 is None or id_new is None:
+                print(f"Warning: Could not find merge IDs for {merge_token_1} {merge_token_2}")
+                continue
+            merges[(id1, id2)] = id_new
+
+        return cls(BPETokenizerParams(vocab, merges))
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterable[int]:
         for text in iterable:

@@ -26,7 +26,6 @@ def read_doc_chunk(reservoir, keyword):
     # Use a positive lookahead (?=...) for the second keyword
     pattern = f"{re.escape(keyword)}(.*?)(?={re.escape(keyword)})"
     matches = re.findall(pattern, reservoir, flags=re.DOTALL)
-    print(matches)  # Output: ['target1', 'target2']
     return matches
 
 def tokenizer_experiment_common(
@@ -37,13 +36,17 @@ def tokenizer_experiment_common(
     with open(doc_to_decode, "r") as f:
         corpus_contents = f.read()
 
-    read_doc_chunk(corpus_contents, spltok[0])
-    #ids = tokenizer.encode(corpus_contents)
-    #assert tokenizer.decode(ids) == corpus_contents
+    verify_docs = read_doc_chunk(corpus_contents, spltok[0])
+    print("len = ", len(verify_docs))
+    for s in verify_docs:
+        encoded = tokenizer.encode(s)
+        decoded = tokenizer.decode(encoded)
+        if decoded != s:
+            print("roundtrip failed for", repr(s), "=>", repr(decoded))
+
 
 def tokenizer_experiments():
-    #for i in range(len(vocab_files)):
-    for i in range(1):
+    for i in range(len(vocab_files)):
         tokenizer_experiment_common(
             vocab_path=   TOKENS_PATH / vocab_files[i],
             merge_path=   TOKENS_PATH /merges_files[i],
@@ -52,4 +55,3 @@ def tokenizer_experiments():
 
 if __name__ == "__main__":
     tokenizer_experiments()
-
