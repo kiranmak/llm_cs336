@@ -86,3 +86,11 @@ def test_train_bpe_special_tokens(snapshot):
             "merges": merges,
         },
     )
+
+def test_train_bpe_tinystories_sample():
+    input_path = FIXTURES_PATH / "tinystories_sample.txt"
+    vocab, merges = run_train_bpe(
+        input_path=input_path,
+        vocab_size=1000,
+        special_tokens=["<|endoftext|>"],
+    )
