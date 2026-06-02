@@ -1,3 +1,4 @@
+from cs336_basics import pre_tokenizer
 import os, time
 import pathlib
 import sys
@@ -103,6 +104,22 @@ class BPETokenizer(Tokenizer):
                 else:
                     self.byte_to_token_id[b] = k
 
+        #  Ensure we have a valid <unk> token id.
+        unk_token = "<unk>"
+        self.unk_id = None
+        for tid, tbytes in self.params.vocab.items():
+            try:
+                if tbytes.decode("utf-8") == unk_token:
+                    self.unk_id = tid
+                    break
+            except UnicodeDecodeError:
+                continue
+        if self.unk_id is None:
+            if self.params.vocab:
+                self.unk_id = max(self.params.vocab) + 1
+            else:
+                self.unk_id = 0
+            self.params.vocab[self.unk_id] = unk_token.encode("utf-8")
         import regex
         self.bpe_regex = regex.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
@@ -133,18 +150,22 @@ class BPETokenizer(Tokenizer):
         indices = []
         for match in self.bpe_regex.finditer(piece):
             token_str = match.group()
-            token_indices = [self.byte_to_token_id[b] for b in token_str.encode("utf-8")]
+            token_indices = [
+                self.byte_to_token_id.get(b, self.unk_id)
+                for b in token_str.encode("utf-8")
+                ]
 
             while len(token_indices) >= 2:
             # Find the adjacent pair with the lowest merge rank
                 best_pair = None
-                best_rank = float('inf')
+                best_rank = float("inf")
                 for i in range(len(token_indices) - 1):
                     pair = (token_indices[i], token_indices[i+1])
-                    rank = self.params.merges.get(pair)
-                    if rank is not None and rank < best_rank:
-                        best_rank = rank
-                        best_pair = pair
+                    if pair in self.params.merges:
+                        rank = self.params.merges[pair]
+                        if rank < best_rank:
+                            best_rank = rank
+                            best_pair = pair
 
                 if best_pair is None:
                     break
@@ -175,9 +196,6 @@ class BPETokenizer(Tokenizer):
         #  (in the same format that your BPE training code output) and (optionally) a list of special tokens.
         from tests.common import gpt2_bytes_to_unicode
 
-        def token_str_to_bytes(token_str):
-            return bytes(gpt2_byte_decoder[token] for token in token_str)
-
         gpt2_byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
         with open(vocab_filepath) as vocab_f:
             gpt2_vocab = json.load(vocab_f)
@@ -189,11 +207,12 @@ class BPETokenizer(Tokenizer):
                 if cleaned_line and len(cleaned_line.split(" ")) == 2:
                     gpt2_bpe_merges.append(tuple(cleaned_line.split(" ")))
 
-        vocab = {}
+        vocab:dict[int, bytes] = {}
         for token_str, token_id in gpt2_vocab.items():
-            token_bytes = bytes(gpt2_byte_decoder[token] for token in token_str)
+            token_bytes = bytes(gpt2_byte_decoder[ch] for ch in token_str)
             vocab[token_id] = token_bytes
-            # If any of the special tokens don't exist in the vocab, append them to the vocab.
+
+        # If any of the special tokens don't exist in the vocab, append them to the vocab.
         if special_tokens:
             for special_token in special_tokens:
                 byte_encoded_special_token = special_token.encode("utf-8")
@@ -353,6 +372,12 @@ def bpe_tokenizer_fn(input_path, vocab_size, special_tokens):
     print_time("   Format", end_time - start_time)
     print_time("   Total", end_time - x_time)
     return vocab, merges_list
+
+class TinyStoriesTokenizer (BPETokenizer):
+    pass
+
+class OpenWebTextTokenizer (BPETokenizer):
+    pass
 
 
 if __name__ == "__main__":
