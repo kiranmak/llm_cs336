@@ -284,9 +284,7 @@ def train_bpe_on_byte_corpus(pre_tokens: Counter, params:BPETokenizerParams, nex
     return next_token_id, pre_tokens
 
 def train_bpe_on_corpus(pre_tokens: Counter,
-                        num_merges: int,
-                        min_pair_count: int = 1,
-                        verbose: bool = False) -> BPETokenizerParams:
+                        num_merges: int) -> BPETokenizerParams:
     """
     Train BPE tokenizer on a corpus.
 
@@ -299,42 +297,131 @@ def train_bpe_on_corpus(pre_tokens: Counter,
     Returns:
         BPETokenizerParams with trained vocab and merges
     """
-    # pre_tokens are already utf-encoded. Just get the index
-    # index1, index2 => merged index
+    from collections import Counter, defaultdict
+    from tqdm import tqdm  # Import the progress bar module
+
     merges: dict[tuple[int, int], int] = {}
-    # index -> bytes
     vocab: dict[int, bytes] = {x: bytes([x]) for x in range(256)}
 
+    #------------------------------------------------------
+    # 1. Build the inverse lookup index of pairs to words
+    # from pre_tokens, create pair based dictionary and 
+    # track which words a pair is associated to.
+    # This may take heck of my RAM
+    #------------------------------------------------------
+    pair_counts = defaultdict(int)
+    # to keep track of words that should be changed when pair count changes
+    pair_to_words = defaultdict(lambda: defaultdict(int))
+    corpus_words = dict(pre_tokens)
+
+    for word_tuple, freq in corpus_words.items():
+        for i in range(len(word_tuple) -1):
+            pair = (word_tuple[i], word_tuple[i+1])
+            pair_counts[pair] += freq
+            pair_to_words[pair][word_tuple] +=1
+
     next_token_id = 256
-    for m in range(num_merges):
-        # 1. Count pairs within word boundaries
-        counts = defaultdict(int)
-        for word_ids, freq in pre_tokens.items():
-            for pair in zip(word_ids, word_ids[1:]):
-                counts[pair] += freq
+    # desc adds a label, and leave=True keeps the finished bar on the screen.
+    progress_bar = tqdm(range(num_merges), desc="Training BPE", leave=True)
 
-        if not counts:
-            break  # No more pairs left to merge
+    #------------------------------------------------------
+    # 1. This is where speed optimization is done
+    #------------------------------------------------------
+    for m in progress_bar:
 
-        # 2. Pick the winner, breaking ties lexicographically by byte values of the tokens
+        # we will keep trimming pair_counts
+        if not pair_counts:
+            progress_bar.set_postfix_str("No more pairs left to merge.")
+            break
+
+        # 2. Pick the winner - pair_counts contain unique pair.
         best_pair = max(
-            counts,
-            key=lambda p: (counts[p], vocab[p[0]], vocab[p[1]])
+            pair_counts,
+            key=lambda p: (pair_counts[p], vocab[p[0]], vocab[p[1]])
         )
+
+        if pair_counts[best_pair] <= 0:
+            break
 
         # 3. Register the new token
         merges[best_pair] = next_token_id
         vocab[next_token_id] = vocab[best_pair[0]] + vocab[best_pair[1]]
 
-        # 4. Update the corpus
-        next_pre_tokens = Counter()
-        for word_ids, freq in pre_tokens.items():
-            if best_pair[0] in word_ids and best_pair[1] in word_ids:
-                merged_ids = tuple(merge(list(word_ids), best_pair, next_token_id))
-                next_pre_tokens[merged_ids] += freq
-            else:
-                next_pre_tokens[word_ids] += freq
-        pre_tokens = next_pre_tokens
+        if m % 100 == 0:
+            try:
+               token_str = vocab[next_token_id].decode("utf-8")
+            except UnicodeDecodeError:
+               token_str = f"bytes({list(vocab[next_token_id])})"
+
+            progress_bar.set_postfix({
+                "freq": pair_counts[best_pair],
+                "unique_words": len(pre_tokens)
+            })
+
+        # Dynamic stats printed right next to the progress bar
+        """
+        progress_bar.set_postfix({
+            "token_id": next_token_id,
+            "merged": f"'{token_str}'",
+            "freq": counts[best_pair],
+            "unique_words": len(pre_tokens)
+        })
+        """
+        # track all the words with best pair
+        affected_words = pair_to_words[best_pair]
+
+        del pair_counts[best_pair] # remove winning pair and trim
+        del pair_to_words[best_pair] # also dict of dict
+
+        # ---------------------------------------------------
+        # 3. Mutate the dictionary in-place by localized
+        # increment and decrements
+        # ---------------------------------------------------
+
+        for old_words, pair_occurences_in_word in list(affected_words.items()):
+            if old_words not in corpus_words:
+                continue
+
+            freq = corpus_words.pop(old_words)
+            # A. Step through the word and DECREMENT global counts for all pairs
+            # that are about to disappear because of the merge
+            for i in range(len(old_words)-1):
+                pr = (old_words[i], old_words[i+1])
+                if pr in pair_counts:
+                    count_to_remove = pair_occurences_in_word * freq
+                    pair_counts[pr] -= freq
+                    pair_to_words[pr][old_words] -= 1
+                    if pair_to_words[pr][old_words] <= 0:
+                        del pair_to_words[pr][old_words]
+                    if pair_counts[pr] <= 0:
+                        del pair_counts[pr]
+
+            # B. Construct the newly merged word structure
+            new_word_list = []
+            i = 0
+            while i < len(old_words):
+                if i < len(old_words) - 1\
+                        and old_words[i] == best_pair[0]\
+                        and old_words[i+1] == best_pair[1]:
+                    new_word_list.append(next_token_id)
+                    i += 2
+                else:
+                    new_word_list.append(old_words[i])
+                    i += 1
+            new_word_tuple = tuple(new_word_list)
+
+            # add new word to local tracker
+            corpus_words[new_word_tuple] = freq
+
+            # increment global counts for new pairs created by merge
+            local_new_pairs = defaultdict(int)
+            for j in range(len(new_word_tuple)-1):
+                local_new_pairs[(new_word_tuple[j], new_word_tuple[j+1])] +=1
+
+            for pr, local_count in local_new_pairs.items():
+                 added_freq = local_count * freq
+                 pair_counts[pr] += added_freq
+                 pair_to_words[pr][new_word_tuple] += local_count
 
         next_token_id += 1
 
@@ -350,7 +437,7 @@ def bpe_tokenizer_fn(input_path, vocab_size, special_tokens):
     num_merges = vocab_size - 256 - len(special_tokens)
 
     start_time = time.perf_counter()
-    params = train_bpe_on_corpus(corpus, num_merges, min_pair_count=1)
+    params = train_bpe_on_corpus(corpus, num_merges)
     end_time = time.perf_counter()    # After
     print_time("   TRAIN", end_time - start_time)
     start_time = time.perf_counter()
@@ -383,6 +470,7 @@ class OpenWebTextTokenizer (BPETokenizer):
 if __name__ == "__main__":
 
     owt_file = """./data/owt_train.txt"""
-    samples_file = "./data/test_samples1.txt"
+    samples_file = "./data/owt_samples.txt"
     tiny_stories_file = """../data/TinyStoriesV2-GPT4-train.txt"""
-    vocab, merges = bpe_tokenizer_fn(samples_file, vocab_size=259)
+    vocab, merges = bpe_tokenizer_fn(samples_file, vocab_size=259,
+                                     special_tokens=["<|endoftext|>"])

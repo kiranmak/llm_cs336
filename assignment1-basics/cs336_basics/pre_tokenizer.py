@@ -5,8 +5,11 @@ from typing import BinaryIO
 from itertools import islice # from printing Counter
 import regex as re
 import mmap
-from multiprocessing import Pool, current_process
+from multiprocessing import current_process
+import multiprocessing
 from collections import Counter, defaultdict
+from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 OUT= "./out"
 IN= "./data"
@@ -111,19 +114,22 @@ class BPEPreTokenizer:
 
         return match_details
 
-    def log_pid(self, x, start, end):
+    def log_pid(self, start, end):
         pid = os.getpid()
         name = current_process().name
-        print(f"Task {x} {name} (PID: {pid}), start {start} end {end}")
+        # Divide by 1024 twice to get Megabytes
+        mb = (end - start) / (1024 * 1024)
+        print(f"{name} (PID: {pid}), {mb:.2f} MB; start {start} end {end}")
 
     def pre_tokenize_chunk(self, args) -> Counter:
-        fname, inst, encode_it, start, end = args
+        """
+         Worker function made standalone so it can be cleanly picked 
+         and distributed across Ubuntu processes without serialization errors.
+         """
+        fname, start, end, special_tokens, special_split_regex, bpe_regex, set_key = args
 
+        self.log_pid(start, end)
         match_details: Counter = Counter()
-        if encode_it:
-            set_key = self.pretoken_bkey
-        else:
-            set_key = self.pretoken_key
 
         # Open the file and memory-map it INSIDE the worker
         with open(fname, "rb") as f:
@@ -138,26 +144,55 @@ class BPEPreTokenizer:
         return match_details
 
 
-    def pre_tokenize_file(self, fname: str, encode_it:bool):
-        start_time = time.perf_counter()  # Before
-        num_processes = 4
+    def pre_tokenize_file(self, fname: str, encode_it: bool):
+        start_time = time.perf_counter()
+        num_workers = 12
+        pre_tokens: Counter = Counter()
+
         with open(fname, "rb") as f:
-            boundaries = find_chunk_boundaries(f, num_processes,
-                                                b"<|endoftext|>")
-        f.close()
-        args = []
+            boundaries = find_chunk_boundaries( f, num_workers, b"<|endoftext|>")
 
-        for i in range(len(boundaries) - 1):
-            arg = (fname, i, encode_it,
-                  boundaries[i], boundaries[i+1])
-            args.append(arg)
+        set_key = self.pretoken_bkey if encode_it else self.pretoken_key
+        # split work
+        ctx = multiprocessing.get_context('spawn')
 
-        with Pool() as pool:
-            results = pool.map(self.pre_tokenize_chunk, args)
-            pre_tokens = sum(results, Counter())
+        print(f"Launching pre-tokenization across {num_workers} parallel CPU workers...")
 
-        end_time = time.perf_counter()    # After
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=ctx) as executor:
+            # Map submits all tasks simultaneously and yields results as they finish
+            futures = []
+            for i in range(len(boundaries) - 1):
+                start, end = boundaries[i], boundaries[i + 1]
+                task_args = (
+                    fname,
+                    start,
+                    end,
+                    self.special_tokens,
+                    self.special_split_regex,
+                    self.bpe_regex,
+                    set_key
+             )
+            futures.append(executor.submit(self.pre_tokenize_chunk, task_args))
+
+            # 2. Process results on-the-fly as they complete
+            for idx, future in enumerate(as_completed(futures)):
+                chunk_counter = future.result()  # Fetch one counter
+
+                print(f" -> Worker chunk completed. Merging into global vocabulary...")
+                pre_tokens += chunk_counter     # Aggregate immediately
+
+                # 3. CRITICAL: Delete the reference immediately so garbage collection
+                # can free the worker's memory allocation right away
+                del chunk_counter
+                print(f" -> Worker chunk successfully merged. ({idx + 1}/{num_workers})",
+                      flush=True)
+
+            # --- THE HARD BARRIER ---
+            print("\n[System] Finished aggregating final vocabulary structures...",
+                  flush=True)
+        end_time = time.perf_counter()
         print_time("PRETOKEN", end_time - start_time)
+        time.sleep(1)
 
         return pre_tokens
 
@@ -191,7 +226,8 @@ class BPEPreTokenizer:
 if __name__ == "__main__":
     pretokenizer = BPEPreTokenizer(special_tokens=["<|endoftext|>"])
     # run with file
-    fname = "./data/test_samples.txt"
+    fname = "./data/owt_samples.txt"
     pre_tokens = pretokenizer.pre_tokenize_file(
                             fname, encode_it=True)
-    pretokenizer.show_pre_tokens(pre_tokens)
+    #pretokenizer.show_pre_tokens(pre_tokens)
+    pretokenizer.write_pre_tokens(pre_tokens, ftype="pkl", fname=fname)

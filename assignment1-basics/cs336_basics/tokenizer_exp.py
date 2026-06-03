@@ -30,7 +30,6 @@ train_files = ["TinyStoriesV2-GPT4-train.txt","owt_train.txt"]
 def encode_file(corpus: str, tokenizer: BPETokenizer, out_path: Path):
     import time
     t0 = time.time()
-    
     global _worker_tokenizer
     _worker_tokenizer = tokenizer
     encoded_ids = encode_chunk(corpus)
@@ -174,6 +173,6 @@ def main_file_encoder():
 
 
 if __name__ == "__main__":
-    #main_file_encoder()
-    tokenizer_experiment_tiny()
-    tokenizer_experiment_web()
+    main_file_encoder()
+    #tokenizer_experiment_tiny()
+    #tokenizer_experiment_web()
