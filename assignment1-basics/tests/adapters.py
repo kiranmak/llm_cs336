@@ -84,10 +84,13 @@ def run_swiglu(
     # If your state dict keys match, you can use `load_state_dict()`
     # swiglu.load_state_dict(weights)
     # You can also manually assign the weights
-    # swiglu.w1.weight.data = w1_weight
-    # swiglu.w2.weight.data = w2_weight
-    # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    from cs336_basics.model import ModelSwiGLU
+    swiglu = ModelSwiGLU(d_model, d_ff)
+    #swiglu.set_weights(w1_weight, w2_weight, w3_weight)
+    swiglu.w1.weight.data = w1_weight
+    swiglu.w2.weight.data = w2_weight
+    swiglu.w3.weight.data = w3_weight
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -382,7 +385,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from cs336_basics.model import ModelRMS
+    model = ModelRMS(d_model, eps)
+    model.set_weights(weights)
+    return model(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -606,6 +612,6 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     from cs336_basics.bpe_tokenizer import bpe_tokenizer_fn
-    
+
     vocab, merges = bpe_tokenizer_fn(input_path, vocab_size, special_tokens)
     return vocab, merges
