@@ -226,3 +226,4 @@ class RotaryPositionalEmbedding(nn.Module):
         q_rotated = (q * cos_full) + (self._rotate_half(q, R, pattern) * sin_full)
 
         return q_rotated
+
