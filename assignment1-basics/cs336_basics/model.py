@@ -166,3 +166,63 @@ class ModelSwiGLU(nn.Module):
         result = einsum(w2, sw1_w3x, 'd_model d_ff, b seq d_ff -> b seq d_model')
 
         return result
+
+class RotaryPositionalEmbedding(nn.Module):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
+        super().__init__()
+        self.d_k = d_k
+        self.theta = theta
+        self.max_seq_len = max_seq_len
+        self.device = device
+        self.dim = d_k // 2
+
+        inv_freq = 1.0 / (theta ** (torch.arange(0, d_k, 2).float() / d_k))
+        t = torch.arange(max_seq_len, dtype=torch.float32)
+        freqs = einsum(t, inv_freq, 'i, j -> i j')
+
+        self.register_buffer('cos_cached', torch.cos(freqs), persistent=False)
+        self.register_buffer('sin_cached', torch.sin(freqs), persistent=False)
+
+    def _rotate_half(self, x, R, pattern):
+        x_paired = x.view(*x.shape[:-1], -1, 2)  # Shape: (..., dim // 2, 2)
+        rotate_tp = einsum(x_paired, R, pattern)
+        # Flatten back to the original shape
+        output = rotate_tp.reshape(x.shape)
+        return output
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        """
+        x: An input tensor of shape (..., seq_len, d_k) and return a tensor of the same shape.
+          Note:
+          1. tolerate 𝑥 with an arbitrary number of batch dimensions.
+          2. Assume that the token positions are a tensor of shape (..., seq_len) specifying the
+          token positions of 𝑥 along the sequence dimension.
+          3. Use the token positions to slice your (possibly precomputed) cos and sin tensors
+            along the sequence dimension.
+            To test your implementation, complete [adapters.run_rope] and make
+            sure it passes uv run pytest -k test_rope.
+        """
+        d_k = x.shape[-1]  # last dimension is d_k
+        q = x[..., :d_k]
+        seq_len = x.shape[-2]  # second last dimension is seq_len
+
+        def pat(t):
+            leading_dims = len(t.shape) - 1  # all dims except last
+            leading_names = ' '.join(f'a{i}' for i in range(leading_dims))
+            pattern = f'{leading_names} d i, j i -> {leading_names} d j'
+            return pattern
+
+        # Slice buffers to current sequence length dim is self.d_k or last part of shape.
+        cos = self.cos_cached[:seq_len, :]  # (seq_len, d_k // 2)
+        sin = self.sin_cached[:seq_len, :]  # (seq_len, d_k // 2)
+
+        # Expand buffers to match the full vector dimension (seq_len, d_k)
+        cos_full = torch.repeat_interleave(cos, 2, dim=-1)
+        sin_full = torch.repeat_interleave(sin, 2, dim=-1)
+
+        # Apply the rotation math to Q and K
+        R = torch.tensor([[0.0, -1.0], [1.0, 0.0]], device=x.device, dtype=x.dtype)
+        pattern = pat(q)
+        q_rotated = (q * cos_full) + (self._rotate_half(q, R, pattern) * sin_full)
+
+        return q_rotated
