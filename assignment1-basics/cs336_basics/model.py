@@ -212,7 +212,7 @@ class RotaryPositionalEmbedding(nn.Module):
             pattern = f'{leading_names} d i, j i -> {leading_names} d j'
             return pattern
 
-        # Slice buffers to current sequence length dim is self.d_k or last part of shape.
+        # Slice buffers to current sequence length
         cos = self.cos_cached[:seq_len, :]  # (seq_len, d_k // 2)
         sin = self.sin_cached[:seq_len, :]  # (seq_len, d_k // 2)
 
@@ -221,7 +221,7 @@ class RotaryPositionalEmbedding(nn.Module):
         sin_full = torch.repeat_interleave(sin, 2, dim=-1)
 
         # Apply the rotation math to Q and K
-        R = torch.tensor([[0.0, -1.0], [1.0, 0.0]], device=x.device, dtype=x.dtype)
+        R = torch.tensor([[0.0, -1.0], [1.0, 0.0]], device=x.device)
         pattern = pat(q)
         q_rotated = (q * cos_full) + (self._rotate_half(q, R, pattern) * sin_full)
 

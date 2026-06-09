@@ -4,6 +4,7 @@ from jaxtyping import Bool, Float, Int
 from einops import rearrange, einsum
 from torch import Tensor
 from cs336_basics.nn_utils import softmax_fn
+from cs336_basics.model import RotaryPositionalEmbedding
 
 """
 Q = tensor([[[-1.5256e+00, -7.5023e-01, -6.5398e-01,  ..., -8.6959e-01,
@@ -32,18 +33,21 @@ mask = tensor([[[ True,  True, False, False,  True, False, False, False, False, 
     3. support an optional user-provided boolean mask of shape (seq_len, seq_len).
     4. The attention probabilities of positions with a mask value of True should
         collectively sum to 1,
-    5. the attention probabilities of positions with a mask value of False should be zero.
-
-    To test your implementation against our provided tests, you will need to implement the test
+    5. the attention probabilities of positions with a mask value of False should
+       be zero.
+    To test your implementation against our provided tests, implement the test
     adapter at [adapters.run_scaled_dot_product_attention] .
-    uv run pytest -k test_scaled_dot_product_attention tests on third-order input tensors,
-    uv run pytest -k test_4d_scaled_dot_product_attention tests on fourth- order input tensors
+    uv run pytest -k test_scaled_dot_product_attention tests
+        - on third-order input tensors,
+    uv run pytest -k test_4d_scaled_dot_product_attention tests
+       - on fourth- order input tensors
 """
 def scaled_dot_product_attention(
         Q: Float[Tensor, "... queries d_k"],
         K: Float[Tensor, "... keys d_k"],
         V: Float[Tensor, "... keys d_v"],
-        mask: Bool[Tensor, " ... queries keys"] | None = None) -> Float[Tensor, " ... queries d_v"]:
+        mask: Bool[Tensor, " ... queries keys"] | None = None
+    ) -> Float[Tensor, " ... queries d_v"]:
     """
     Given key (K), query (Q), and value (V) tensors, return
     the output of your scaled dot product attention implementation.
@@ -64,3 +68,109 @@ def scaled_dot_product_attention(
     attention_weights = softmax_fn(qks, dim=-1)
     output = einsum(attention_weights, V, '... queries keys, ... keys values -> ... queries values')
     return output
+
+"""
+Deliverable: Implement causal multi-head self-attention as a torch.nn.Module. Your implementation should accept (at least) the following parameters:
+d_model: int Dimensionality of the Transformer block inputs.
+num_heads: int Number of heads to use in multi-head self-attention.
+Following A. Vaswani et al. [8], set 𝑑𝑘=𝑑𝑣=𝑑modelℎ. To test your implementation against our provided tests, implement the test adapter at [adapters.run_multihead_self_attention] . Then, run uv run pytest -k test_multihead_self_attention to test your implementation.
+"""
+class MultiheadSelfAttention(torch.nn.Module):
+
+    def __init__(self, d_model: int, num_heads: int, device=None, dtype=None):
+        """
+        Args:
+            d_model (int): Dimensionality of the feedforward input and output.
+            num_heads (int): Number of heads to use in multi-headed attention.
+        """
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.device = device
+        self.dtype = dtype
+        self.q_proj_wt = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
+        self.k_proj_wt = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
+        self.v_proj_wt = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
+        self.o_proj_wt = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
+
+    def set_weights(self, q_proj, k_proj, v_proj, o_proj):
+
+        """
+        Args:
+        q_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the Q projection
+        k_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the K projection
+        v_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the V projection
+        o_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the output projection
+        """
+        self.q_proj_wt.weight.data = q_proj.clone().to(device=self.device, dtype=self.dtype)
+        self.k_proj_wt.weight.data = k_proj.clone().to(device=self.device, dtype=self.dtype)
+        self.v_proj_wt.weight.data = v_proj.clone().to(device=self.device, dtype=self.dtype)
+        self.o_proj_wt.weight.data = o_proj.clone().to(device=self.device, dtype=self.dtype)
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
+
+        """
+        Args:
+            x: in_features (Float[Tensor, "... sequence_length d_model"])
+        Returns:
+            Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of
+            running your optimized, batched multi-headed attention
+            implementation with the given QKV projection weights and input features.
+        """
+        Q = self.q_proj_wt(x) # (..., seq_len, d_model)
+        K = self.k_proj_wt(x)
+        V = self.v_proj_wt(x)
+        # split into heards
+        """
+        Example:
+        If d_model = 768, heads = 12, and d_k = 64:
+            x has shape (batch_size, seq_len, 768).
+            Q = self.q_proj_wt(x) has shape (batch_size, seq_len, 768).
+            rearrange transforms Q into shape (batch_size, 12, seq_len, 64).
+        """
+        Q = rearrange(Q, '... seq_len (heads d_k) -> ... heads seq_len d_k', heads=self.num_heads)
+        K = rearrange(K, '... seq_len (heads d_k) -> ... heads seq_len d_k', heads=self.num_heads)
+        V = rearrange(V, '... seq_len (heads d_v) -> ... heads seq_len d_v', heads=self.num_heads)
+
+        # --- APPLY RoPE HERE if token_positions is provided ---
+        if token_positions is not None and hasattr(self, 'rope_model'):
+            # RoPE expects (..., seq_len, d_k)
+            # So we apply RoPE to Q and K
+            Q = self.rope_model(Q, token_positions)
+            K = self.rope_model(K, token_positions)
+
+        # Causal masking 1. Create a matrix of ones
+        # diagonal=1 excludes the main diagonal (j == i)
+        seq_len = x.shape[-2]
+        #causal_mask = torch.triu(ones, diagonal=1).bool()
+        ones = torch.ones(seq_len, seq_len, device=x.device)
+        causal_mask = torch.tril(ones).bool()
+
+        attn_out = scaled_dot_product_attention(Q, K, V, causal_mask)
+        attn_out = rearrange(attn_out,
+                             '... heads seq_len d_v -> ... seq_len (heads d_v)',
+                             heads=self.num_heads)
+        final_tensor = self.o_proj_wt(attn_out)
+        return final_tensor
+
+
+class MultiheadSelfAttentionWithRoPE(MultiheadSelfAttention):
+
+    def __init__(self, d_model: int, max_seq_len: int, theta: float, num_heads: int, device=None, dtype=None):
+        """
+        Args:
+            d_model (int): Dimensionality of the feedforward input and output.
+            num_heads (int): Number of heads to use in multi-headed attention.
+        """
+        super().__init__(d_model, num_heads, device, dtype)
+        self.max_seq_len = max_seq_len
+        self.theta = theta
+        
+        d_k = d_model // num_heads
+        self.rope_model = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
+
+    def forward(self, x, token_positions):
+        attn_out = super().forward(x, token_positions)
+        return attn_out
+
+
