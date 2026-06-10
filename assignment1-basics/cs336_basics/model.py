@@ -55,7 +55,10 @@ class ModelEmbeddings(nn.Module):
         w = torch.empty(num_embeddings, embedding_dim,
                         device=device, dtype=dtype)
         nn.init.trunc_normal_(w)
-        self.weight = nn.Parameter(w, requires_grad=True)
+        self.weight = nn.Parameter(
+                        w.clone().to(device=device, dtype=dtype),
+                        requires_grad=True
+                    )
 
     def set_weights(self, wts: Float[Tensor, " num_embeddings  embedding_dim"]):
         self.weight = nn.Parameter(wts.clone().to(device=self.device, dtype=self.dtype),requires_grad=True)
@@ -87,13 +90,6 @@ class ModelRMS(nn.Module):
         w = torch.empty(d_model, device=device, dtype=dtype)
         nn.init.trunc_normal_(w)
         self.weight = nn.Parameter(w, requires_grad=True)
-
-    def set_weights(self, wts: Float[Tensor, " d_model"]):
-        """ weights (Float[Tensor, "d_model"]): RMSNorm weights."""
-
-        self.weight = nn.Parameter(wts.clone().to(device=self.device,
-                                                  dtype=self.dtype),
-                                   requires_grad=True)
 
     def forward(self, x: torch.Tensor)-> torch.Tensor:
         """

@@ -54,7 +54,7 @@ def run_embedding(
 
     from cs336_basics.model import ModelEmbeddings
     model = ModelEmbeddings(vocab_size, d_model)
-    model.set_weights(weights)
+    model.load_state_dict({"weight": weights})
     return model(token_ids)
 
 
@@ -86,10 +86,12 @@ def run_swiglu(
     # You can also manually assign the weights
     from cs336_basics.model import ModelSwiGLU
     swiglu = ModelSwiGLU(d_model, d_ff)
-    #swiglu.set_weights(w1_weight, w2_weight, w3_weight)
-    swiglu.w1.weight.data = w1_weight
-    swiglu.w2.weight.data = w2_weight
-    swiglu.w3.weight.data = w3_weight
+    weights_dict = {
+    "w1.weight": w1_weight,
+    "w2.weight": w2_weight,
+    "w3.weight": w3_weight
+    }
+    swiglu.load_state_dict(weights_dict)
     return swiglu(in_features)
 
 
@@ -149,10 +151,13 @@ def run_multihead_self_attention(
     """
     from cs336_basics.attention import MultiheadSelfAttention
     model = MultiheadSelfAttention(d_model, num_heads)
-    model.set_weights ( q_proj_weight,
-                k_proj_weight,
-                v_proj_weight,
-                o_proj_weight)
+    weights = {
+    "q_proj.weight": q_proj_weight,
+    "k_proj.weight": k_proj_weight,
+    "v_proj.weight": v_proj_weight,
+    "o_proj.weight": o_proj_weight
+    }
+    model.load_state_dict(weights, strict=False)
     return model(in_features)
 
 
@@ -195,10 +200,13 @@ def run_multihead_self_attention_with_rope(
     """
     from cs336_basics.attention import MultiheadSelfAttentionWithRoPE
     model = MultiheadSelfAttentionWithRoPE(d_model, max_seq_len, theta, num_heads)
-    model.set_weights ( q_proj_weight,
-                k_proj_weight,
-                v_proj_weight,
-                o_proj_weight)
+    weights_dict = {
+    "q_proj.weight": q_proj_weight,
+    "k_proj.weight": k_proj_weight,
+    "v_proj.weight": v_proj_weight,
+    "o_proj.weight": o_proj_weight
+    }
+    model.load_state_dict(weights_dict)
     return model(in_features, token_positions)
 
 
@@ -296,7 +304,10 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.transformer import TransformerBlock
+    model = TransformerBlock(d_model, max_seq_len, theta, num_heads, d_ff)
+    model.load_state_dict(weights)
+    return model(in_features)
 
 
 def run_transformer_lm(
@@ -403,7 +414,7 @@ def run_rmsnorm(
     """
     from cs336_basics.model import ModelRMS
     model = ModelRMS(d_model, eps)
-    model.set_weights(weights)
+    model.load_state_dict({"weight": weights}, strict=False)
     return model(in_features)
 
 

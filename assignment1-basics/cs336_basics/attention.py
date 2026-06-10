@@ -88,10 +88,10 @@ class MultiheadSelfAttention(torch.nn.Module):
         self.num_heads = num_heads
         self.device = device
         self.dtype = dtype
-        self.q_proj_wt = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
-        self.k_proj_wt = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
-        self.v_proj_wt = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
-        self.o_proj_wt = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
+        self.q_proj = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
+        self.k_proj = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
+        self.v_proj = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
+        self.output_proj = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
 
     def set_weights(self, q_proj, k_proj, v_proj, o_proj):
 
@@ -100,12 +100,12 @@ class MultiheadSelfAttention(torch.nn.Module):
         q_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the Q projection
         k_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the K projection
         v_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the V projection
-        o_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the output projection
+        output_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the output projection
         """
-        self.q_proj_wt.weight.data = q_proj.clone().to(device=self.device, dtype=self.dtype)
-        self.k_proj_wt.weight.data = k_proj.clone().to(device=self.device, dtype=self.dtype)
-        self.v_proj_wt.weight.data = v_proj.clone().to(device=self.device, dtype=self.dtype)
-        self.o_proj_wt.weight.data = o_proj.clone().to(device=self.device, dtype=self.dtype)
+        self.q_proj.weight.data = q_proj.clone().to(device=self.device, dtype=self.dtype)
+        self.k_proj.weight.data = k_proj.clone().to(device=self.device, dtype=self.dtype)
+        self.v_proj.weight.data = v_proj.clone().to(device=self.device, dtype=self.dtype)
+        self.output_proj.weight.data = o_proj.clone().to(device=self.device, dtype=self.dtype)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
 
@@ -117,10 +117,12 @@ class MultiheadSelfAttention(torch.nn.Module):
             running your optimized, batched multi-headed attention
             implementation with the given QKV projection weights and input features.
         """
-        Q = self.q_proj_wt(x) # (..., seq_len, d_model)
-        K = self.k_proj_wt(x)
-        V = self.v_proj_wt(x)
-        # split into heards
+        if token_positions is not None:
+            print("shape of token_positions", token_positions.shape)
+        Q = self.q_proj(x) # (..., seq_len, d_model)
+        K = self.k_proj(x)
+        V = self.v_proj(x)
+        # split into hes
         """
         Example:
         If d_model = 768, heads = 12, and d_k = 64:
@@ -150,7 +152,7 @@ class MultiheadSelfAttention(torch.nn.Module):
         attn_out = rearrange(attn_out,
                              '... heads seq_len d_v -> ... seq_len (heads d_v)',
                              heads=self.num_heads)
-        final_tensor = self.o_proj_wt(attn_out)
+        final_tensor = self.output_proj(attn_out)
         return final_tensor
 
 
@@ -165,7 +167,7 @@ class MultiheadSelfAttentionWithRoPE(MultiheadSelfAttention):
         super().__init__(d_model, num_heads, device, dtype)
         self.max_seq_len = max_seq_len
         self.theta = theta
-        
+
         d_k = d_model // num_heads
         self.rope_model = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
 
