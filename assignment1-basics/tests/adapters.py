@@ -29,7 +29,8 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
     from cs336_basics.model import LinearTransform
-    model = LinearTransform(d_in, d_out, weights)
+    model = LinearTransform(d_in, d_out)
+    model.load_state_dict({"weight": weights})
     return model(in_features)
 
 
@@ -155,7 +156,7 @@ def run_multihead_self_attention(
     "q_proj.weight": q_proj_weight,
     "k_proj.weight": k_proj_weight,
     "v_proj.weight": v_proj_weight,
-    "o_proj.weight": o_proj_weight
+    "output_proj.weight": o_proj_weight
     }
     model.load_state_dict(weights, strict=False)
     return model(in_features)
@@ -204,7 +205,7 @@ def run_multihead_self_attention_with_rope(
     "q_proj.weight": q_proj_weight,
     "k_proj.weight": k_proj_weight,
     "v_proj.weight": v_proj_weight,
-    "o_proj.weight": o_proj_weight
+    "output_proj.weight": o_proj_weight
     }
     model.load_state_dict(weights_dict)
     return model(in_features, token_positions)
@@ -389,7 +390,10 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.transformer import TransformerModel
+    model = TransformerModel(vocab_size, d_model, context_length, rope_theta, num_heads, d_ff, num_layers)
+    model.load_state_dict(weights)
+    return model(in_indices)
 
 
 def run_rmsnorm(

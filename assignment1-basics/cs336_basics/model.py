@@ -10,7 +10,6 @@ import numpy as np
 class LinearTransform(nn.Module):
     def __init__(self, in_dim: int,
                  out_dim: int,
-                 weights: Float[Tensor, " d_out d_in"] | None = None,
                  device=None,
                  dtype=None):
         """
@@ -20,16 +19,11 @@ class LinearTransform(nn.Module):
         dtype: torch.dtype | None = None Data type of the parameters
         """
         super(LinearTransform, self).__init__()
-        # construct and store your parameter as 𝑊 (not 𝑊 ⊤), putting it in an nn.Parameter
-        if weights is not None:
-            self.weight = nn.Parameter(
-                        weights.clone().to(device=device, dtype=dtype),
-                        requires_grad=True
-                    )
-        else:
-            w = torch.empty(out_dim, in_dim, device=device, dtype=dtype)
-            nn.init.trunc_normal_(w)
-            self.weight = nn.Parameter(w, requires_grad=True)
+        # construct and store your parameter as 𝑊 (not 𝑊 ⊤), putting
+        #it in an nn.Parameter
+        w = torch.empty(out_dim, in_dim, device=device, dtype=dtype)
+        nn.init.trunc_normal_(w)
+        self.weight = nn.Parameter(w, requires_grad=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Apply the linear transformation to the
