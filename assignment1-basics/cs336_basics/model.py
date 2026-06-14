@@ -140,22 +140,26 @@ class ModelSwiGLU(nn.Module):
         and return a tensor of the same shape.
         Note: your input to torch.float32 before performing the normalization
         """
+        from cs336_basics.nn_utils import silu_fn
 
         w1 = self.w1.weight
         w2 = self.w2.weight
         w3 = self.w3.weight
         # W1x.sizgmoid(W1.x) -- A
         w1x = einsum(w1, x, 'd_ff d_model, b seq d_model -> b seq d_ff')
-        silux = w1x * torch.sigmoid(w1x)
+        #silux = w1x * torch.sigmoid(w1x)
 
         # W3x -- B
         w3x = einsum(w3, x, 'd_ff d_model, b seq d_model -> b seq d_ff')
         # matmul AB or SiLU(W1x) * W3x
-        sw1_w3x = silux * w3x
+        #sw1_w3x = silu_fn(w1x) * w3x
+        sw1_w3x = einsum(silu_fn(w1x), w3x, '... seq d_ff, ... seq d_ff -> ... seq d_ff')
+
         # W2.matmul result
         result = einsum(w2, sw1_w3x, 'd_model d_ff, b seq d_ff -> b seq d_model')
 
         return result
+
 
 class RotaryPositionalEmbedding(nn.Module):
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
