@@ -57,6 +57,5 @@ class TransformerModel(nn.Module):
             embeddings = layer(embeddings)
         final_norm = self.ln_final(embeddings)
         logits = self.lm_head(final_norm)
-        #probabilities= torch.softmax(logits, dim = -1)
         return logits
 
