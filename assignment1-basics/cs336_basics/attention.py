@@ -117,8 +117,6 @@ class MultiheadSelfAttention(torch.nn.Module):
             running your optimized, batched multi-headed attention
             implementation with the given QKV projection weights and input features.
         """
-        if token_positions is not None:
-            print("shape of token_positions", token_positions.shape)
         Q = self.q_proj(x) # (..., seq_len, d_model)
         K = self.k_proj(x)
         V = self.v_proj(x)

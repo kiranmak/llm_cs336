@@ -1,9 +1,9 @@
 from typing import Iterable
 import torch
 import torch.nn as nn
-from jaxtyping import Bool, Float, Int
-from einops import rearrange, einsum
-import einx
+import numpy.typing as npt
+from jaxtyping import Float
+from einops import einsum
 from torch import Tensor
 import torch.nn.functional as F
 import math
@@ -83,7 +83,7 @@ def gradient_clipping(parameters: Iterable[torch.nn.Parameter],
 
     # Calculate the norm for each parameter's gradient
     norms = [torch.norm(p.grad.detach()) for p in params_with_grad]
-    
+
     # Stack the individual norms into a tensor
     # For MPS device, ensure tensor operations stay on MPS for efficiency
     if torch.backends.mps.is_available():
@@ -95,7 +95,7 @@ def gradient_clipping(parameters: Iterable[torch.nn.Parameter],
     # Calculate the clipping coefficient
     clip_coef = max_l2_norm / (total_norm + 1e-6)
     clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
-    
+
     # Apply the clipping coefficient to each parameter's gradient
     # Ensure the coefficient is on the same device as the gradient
     if torch.backends.mps.is_available():
@@ -104,4 +104,60 @@ def gradient_clipping(parameters: Iterable[torch.nn.Parameter],
     else:
         for p in params_with_grad:
             p.grad.detach().mul_(clip_coef_clamped.to(p.grad.device))
+
+
+def get_batch(dataset: npt.NDArray, batch_size: int,
+              context_length: int, device: str
+              ) -> tuple[torch.Tensor, torch.Tensor]:
+
+    import numpy as np
+    potential_start_indices = len(dataset) - context_length
+    start_indices = np.random.randint(0, potential_start_indices, size=batch_size)
+
+    indices = start_indices[:, None] + np.arange(context_length)
+
+    X = torch.as_tensor(dataset[indices], dtype=torch.int64, device=device)
+    Y = torch.as_tensor(dataset[indices + 1], dtype=torch.int64, device=device)
+
+    return X, Y
+
+
+#Implement the following two functions to load and save checkpoints:
+def save_checkpoint(model, optimizer, iteration, out):
+    """ This function should dump all the state from the
+        model, optimizer and iteration into the file-like object out.
+        * use the state_dict method of model and the optimizer
+        * torch.save(obj, out) to dump obj into out
+        * A typical choice is to have obj be a dictionary, but you can use whatever format
+          you want as long as you can load your checkpoint later.
+        This function expects the following parameters:
+            model: torch.nn.Module
+            optimizer: torch.optim.Optimizer
+            iteration: int
+            out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]
+     """
+    checkpoint_state = {}
+    checkpoint_state["iteration"] = iteration
+    checkpoint_state["model"] = model.state_dict()
+    checkpoint_state["optimizer"] = optimizer.state_dict()
+    torch.save(checkpoint_state, out)
+
+
+
+def load_checkpoint(src, model, optimizer):
+    """should load a checkpoint from src (path or file-like
+       object), and then recover the model and optimizer states from that checkpoint. Your function
+        should return the iteration number that was saved to the checkpoint.
+        You can use torch.load(src) to recover what you saved in your save_checkpoint implementation, and the
+        load_state_dict method in both the model and optimizer to return them to their previous
+        states.
+        This function expects the following parameters:
+            src: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]
+            model: torch.nn.Module
+            optimizer: torch.optim.Optimizer
+    """
+    checkpoint_state = torch.load(src)
+    model.load_state_dict(checkpoint_state["model"])
+    optimizer.load_state_dict(checkpoint_state["optimizer"])
+    return checkpoint_state["iteration"]
 
