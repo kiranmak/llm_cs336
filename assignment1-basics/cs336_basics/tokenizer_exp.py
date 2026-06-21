@@ -36,7 +36,7 @@ def encode_file(corpus: str, tokenizer: BPETokenizer, out_path: Path):
     encoded_arr = np.array(encoded_ids, dtype=np.uint16)
     print("first 20 ids ", encoded_arr[:20]) 
     np.save(out_path, encoded_arr)
-    
+ 
     total_tokens = len(encoded_ids)
     print(f"Encoding finished in {time.time() - t0:.1f}s. Total tokens: {total_tokens}")
     print(f"Saved to {out_path}")
@@ -72,9 +72,13 @@ def init_worker(vocab_path, merge_path, special_tokens, tokenizer_cls_name):
     global _worker_tokenizer
     from cs336_basics.bpe_tokenizer import TinyStoriesTokenizer, OpenWebTextTokenizer
     if tokenizer_cls_name == "TinyStoriesTokenizer":
-        _worker_tokenizer = TinyStoriesTokenizer.from_files(vocab_path, merge_path, special_tokens)
+        _worker_tokenizer = TinyStoriesTokenizer.from_files(vocab_path,
+                                                            merge_path,
+                                                            special_tokens)
     else:
-        _worker_tokenizer = OpenWebTextTokenizer.from_files(vocab_path, merge_path, special_tokens)
+        _worker_tokenizer = OpenWebTextTokenizer.from_files(vocab_path,
+                                                            merge_path,
+                                                            special_tokens)
 
 def encode_chunk(lines):
     ids = []
@@ -95,42 +99,46 @@ def chunk_generator(filepath, chunk_size=50000):
         if chunk:
             yield chunk
 
-def encode_file_parallel(txt_path: Path, vocab_path: Path, merge_path: Path, special_tokens: list[str], tokenizer_cls_name: str, out_path: Path, num_workers: int = None):
+def encode_file_parallel(txt_path: Path, vocab_path: Path,
+                         merge_path: Path,
+                         special_tokens: list[str],
+                         tokenizer_cls_name: str,
+                         out_path: Path, num_workers: int = None):
     import time
-    print(f"Parallel encoding {txt_path} -> {out_path} using {tokenizer_cls_name}...")
+    print(f"Parallel encode {txt_path} -> {out_path} using {tokenizer_cls_name}.")
     t0 = time.time()
-    
+
     if num_workers is None:
         num_workers = max(1, multiprocessing.cpu_count() - 1)
     print(f"Using {num_workers} processes.")
 
     temp_bin_path = out_path.with_suffix(".bin")
-    
+
     pool = multiprocessing.Pool(
         processes=num_workers,
         initializer=init_worker,
         initargs=(vocab_path, merge_path, special_tokens, tokenizer_cls_name)
     )
-    
+
     total_tokens = 0
     chunks = chunk_generator(txt_path, chunk_size=100000)
-    
+
     with open(temp_bin_path, "wb") as bin_f:
         for encoded_chunk in pool.imap(encode_chunk, chunks, chunksize=1):
             arr = array('H', encoded_chunk)
             arr.tofile(bin_f)
             total_tokens += len(encoded_chunk)
-            
+
     pool.close()
     pool.join()
-    
+
     print(f"Encoding finished in {time.time() - t0:.1f}s. Total tokens: {total_tokens}")
     print(f"Converting raw binary to .npy format...")
-    
+
     t_conv = time.time()
     data = np.fromfile(temp_bin_path, dtype=np.uint16)
     np.save(out_path, data)
-    
+
     os.remove(temp_bin_path)
     print(f"Conversion and save to {out_path} finished in {time.time() - t_conv:.1f}s.")
 
@@ -152,7 +160,7 @@ def main_file_encoder():
         tokenizer_cls_name="TinyStoriesTokenizer",
         out_path=TOKENS_PATH / "tinystories_dev_ids.npy"
     )
-    
+
     # OpenWebText
     encode_file_parallel(
         txt_path=DATA_PATH / train_files[1],

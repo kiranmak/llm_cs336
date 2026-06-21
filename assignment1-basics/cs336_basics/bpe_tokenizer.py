@@ -190,6 +190,7 @@ class BPETokenizer(Tokenizer):
             else:
                 indices.extend(self.encode_piece(piece))
         return indices
+
     @classmethod
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
         # Class method that constructs and returns a Tokenizer from a serialized vocabulary and list of merges
@@ -244,7 +245,9 @@ def get_compression_ratio(string: str, indices: list[int]) -> float:
     num_tokens = len(indices)
     return num_bytes / num_tokens
 
-def train_bpe_on_byte_corpus(pre_tokens: Counter, params:BPETokenizerParams, next_id) -> tuple[int, Counter]:
+def train_bpe_on_byte_corpus(pre_tokens: Counter,
+                             params:BPETokenizerParams,
+                             next_id) -> tuple[int, Counter]:
 
     # pre_tokens are already utf-encoded. Just get the index
     # index1, index2 => merged index
@@ -259,7 +262,8 @@ def train_bpe_on_byte_corpus(pre_tokens: Counter, params:BPETokenizerParams, nex
             counts[pair] += freq
 
     if counts:
-        # 2. Pick the winner, breaking ties lexicographically by byte values of the tokens
+        # 2. Pick the winner, breaking ties lexicographically by byte values
+        #    of the tokens
         best_pair = max(
             counts,
             key=lambda p: (counts[p], vocab[p[0]], vocab[p[1]])
@@ -273,7 +277,9 @@ def train_bpe_on_byte_corpus(pre_tokens: Counter, params:BPETokenizerParams, nex
         next_pre_tokens = Counter()
         for word_ids, freq in pre_tokens.items():
             if best_pair[0] in word_ids and best_pair[1] in word_ids:
-                merged_ids = tuple(merge(list(word_ids), best_pair, next_token_id))
+                merged_ids = tuple(merge(list(word_ids),
+                                         best_pair, next_token_id)
+                                  )
                 next_pre_tokens[merged_ids] += freq
             else:
                 next_pre_tokens[word_ids] += freq
