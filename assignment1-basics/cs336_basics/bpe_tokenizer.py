@@ -13,10 +13,7 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-try:
-    from .pre_tokenizer import BPEPreTokenizer, print_time
-except ImportError:
-    from pre_tokenizer import BPEPreTokenizer, print_time
+from cs336_basics.pre_tokenizer import BPEPreTokenizer, print_time
 
 class Tokenizer(ABC):
     """Abstract interface for a tokenizer."""
@@ -466,17 +463,5 @@ def bpe_tokenizer_fn(input_path, vocab_size, special_tokens):
     print_time("   Total", end_time - x_time)
     return vocab, merges_list
 
-class TinyStoriesTokenizer (BPETokenizer):
-    pass
 
-class OpenWebTextTokenizer (BPETokenizer):
-    pass
-
-
-if __name__ == "__main__":
-
-    owt_file = """./data/owt_train.txt"""
-    samples_file = "./data/owt_samples.txt"
-    tiny_stories_file = """../data/TinyStoriesV2-GPT4-train.txt"""
-    vocab, merges = bpe_tokenizer_fn(samples_file, vocab_size=259,
-                                     special_tokens=["<|endoftext|>"])
+# examples: see bpe_train for usage

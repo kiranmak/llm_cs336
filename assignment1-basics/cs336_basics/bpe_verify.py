@@ -2,15 +2,9 @@
 
 import time
 from collections import Counter
-try:
-    from .bpe_tokenizer import BPETokenizer, BPETokenizerParams, merge
-    from .bpe_tokenizer import train_bpe_on_corpus, bpe_tokenizer_fn, print_time
-    from .pre_tokenizer import load_pkl
-except ImportError:
-    from bpe_tokenizer import BPETokenizer, BPETokenizerParams, merge
-    from bpe_tokenizer import train_bpe_on_corpus, bpe_tokenizer_fn, print_time
-    # pyrefly: ignore [missing-import]
-    from pre_tokenizer import load_pkl
+ from bpe_tokenizer import BPETokenizer, BPETokenizerParams, merge
+ from bpe_tokenizer import train_bpe_on_corpus, bpe_tokenizer_fn, print_time
+ from pre_tokenizer import load_pkl
 
 def _token_ids_to_bytes(word_ids: tuple[int, ...], vocab: dict[int, bytes]) -> bytes:
     return b"".join(vocab[i] for i in word_ids)

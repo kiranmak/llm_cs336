@@ -9,13 +9,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from cs336_basics.pre_tokenizer import print_time
+from cs336_basics.bpe_tokenizer import bpe_tokenizer_fn
 
 DATA_PATH = PROJECT_ROOT / "data"
 OUT_PATH = PROJECT_ROOT / "out"
 OUT_PATH.mkdir(parents=True, exist_ok=True)
 
 def train_bpe_common(in_file, out_vocab_file, out_merges_file, vocab_size=1000, special_tokens=None):
-    from tests.adapters import run_train_bpe
     from tests.common import gpt2_bytes_to_unicode
 
     if special_tokens is None:
@@ -23,20 +23,19 @@ def train_bpe_common(in_file, out_vocab_file, out_merges_file, vocab_size=1000, 
 
     # Train BPE
     start_time = time.perf_counter()
-    vocab, merges = run_train_bpe(
+    vocab, merges = bpe_tokenizer_fn(
         input_path=in_file,
         vocab_size=vocab_size,
         special_tokens=special_tokens,
     )
     train_time = time.perf_counter() - start_time
-    print("  Elapsed Time:", print_time("Training", train_time))
+    print_time("Training", train_time)
     print("  Vocabulary size:", len(vocab))
     print("  Merges size:", len(merges))
 
     # Convert bytes to GPT-2 unicode strings
     start_time = time.perf_counter()
     gpt2_unicode_map = gpt2_bytes_to_unicode()
-    #bytes_to_unicode = lambda b: "".join(gpt2_unicode_map[x] for x in b)
 
     def bytes_to_unicode(b: bytes) -> str:
         return "".join(gpt2_unicode_map[x] for x in b)
@@ -60,9 +59,9 @@ def train_bpe_common(in_file, out_vocab_file, out_merges_file, vocab_size=1000, 
 
 def train_bpe_expts_sample():
     train_bpe_common(
-        in_file=DATA_PATH / "owt_samples.txt",
-        out_vocab_file=OUT_PATH / "owt_samples_vocab.json",
-        out_merges_file=OUT_PATH / "owt_samples_merges.txt",
+        in_file=       DATA_PATH / "owt_samples.txt",
+        out_vocab_file = OUT_PATH / "owt_samples_vocab.json",
+        out_merges_file= OUT_PATH / "owt_samples_merges.txt",
         vocab_size=300,
         special_tokens=["<|endoftext|>"]
     )
@@ -90,8 +89,8 @@ def train_bpe_expts_owt():
 
 
 if __name__ == "__main__":
-    #print("---Training BPE on TinyStories...---")
-    #train_bpe_tinystories()
+    print("---Training BPE on TinyStories...---")
+    train_bpe_tinystories()
 
     print("\n---Training BPE on OpenWebText---")
     train_bpe_expts_owt()
