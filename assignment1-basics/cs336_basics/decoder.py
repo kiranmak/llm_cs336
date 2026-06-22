@@ -33,6 +33,7 @@ following steps:
 """
 from tests.test_tokenizers import get_tokenizer_from_vocab_merges_path
 from cs336_basics.run import load_hyperparams, CHECKPOINT_PATH
+from cs336_basics.bpe_train import DATA_PATH, OUT_PATH
 
 def decoding(prompt_string, vocab_path, device):
 
@@ -45,7 +46,7 @@ def decoding(prompt_string, vocab_path, device):
     num_heads  = hp.num_heads
     d_ff       = hp.d_ff
     d_model    = hp.d_model
-    rope_theta    = hp.rope_theta
+    rope_theta = hp.rope_theta
 
     model = TransformerModel(vocab_size, d_model,
                              context_length, rope_theta,
@@ -66,6 +67,8 @@ def  prompt():
 
 if __name__ == "__main__":
     prompt_text = prompt()
-    VOCAB_FILE = 
-    decoding(prompt_text)
+    src_file = "TinyStories"
+    VOCAB_FILE =  OUT_PATH / f"{src_file}_vocab.json"
+    MERGES_FILE = OUT_PATH / f"{src_file}_merges.txt"
+    decoding(prompt_text, vocab_file)
 

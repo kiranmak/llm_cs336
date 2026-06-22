@@ -128,7 +128,7 @@ class BPEPreTokenizer:
          """
         fname, start, end, special_tokens, special_split_regex, bpe_regex, set_key = args
 
-        self.log_pid(start, end)
+        #self.log_pid(start, end)
         match_details: Counter = Counter()
 
         # Open the file and memory-map it INSIDE the worker
@@ -170,22 +170,21 @@ class BPEPreTokenizer:
                     self.special_tokens,
                     self.special_split_regex,
                     self.bpe_regex,
-                    set_key
-             )
-            futures.append(executor.submit(self.pre_tokenize_chunk, task_args))
+                    set_key)
+                futures.append(executor.submit(self.pre_tokenize_chunk, task_args))
 
             # 2. Process results on-the-fly as they complete
             for idx, future in enumerate(as_completed(futures)):
                 chunk_counter = future.result()  # Fetch one counter
 
-                print(f" -> Worker chunk completed. Merging into global vocabulary...")
+                #print(f" -> Worker chunk completed. Merging into global vocabulary...")
                 pre_tokens += chunk_counter     # Aggregate immediately
 
                 # 3. CRITICAL: Delete the reference immediately so garbage collection
                 # can free the worker's memory allocation right away
                 del chunk_counter
-                print(f" -> Worker chunk successfully merged. ({idx + 1}/{num_workers})",
-                      flush=True)
+                #print(f" -> Worker chunk successfully merged. ({idx + 1}/{num_workers})",
+                #      flush=True)
 
             # --- THE HARD BARRIER ---
             print("\n[System] Finished aggregating final vocabulary structures...",

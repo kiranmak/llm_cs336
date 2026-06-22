@@ -29,9 +29,9 @@ def train_bpe_common(in_file, out_vocab_file, out_merges_file, vocab_size=1000, 
         special_tokens=special_tokens,
     )
     train_time = time.perf_counter() - start_time
-    print("Elapsed Time:", print_time("Training", train_time))
-    print("Vocabulary size:", len(vocab))
-    print("Merges size:", len(merges))
+    print("  Elapsed Time:", print_time("Training", train_time))
+    print("  Vocabulary size:", len(vocab))
+    print("  Merges size:", len(merges))
 
     # Convert bytes to GPT-2 unicode strings
     start_time = time.perf_counter()
@@ -69,20 +69,22 @@ def train_bpe_expts_sample():
 
 
 def train_bpe_tinystories():
+    prefix="TinyStoriesV2-GPT4"
     train_bpe_common(
-        in_file=DATA_PATH / "TinyStoriesV2-GPT4-train.txt",
-        out_vocab_file=OUT_PATH / "TinyStories_vocab.json",
-        out_merges_file=OUT_PATH / "TinyStories_merges.txt",
-        vocab_size=10000,
+        in_file       =  DATA_PATH / f"{prefix}-train.txt",
+        out_vocab_file=  OUT_PATH  / f"{prefix}_vocab.json",
+        out_merges_file= OUT_PATH  / f"{prefix}_merges.txt",
+        vocab_size     = 10000,
         special_tokens=["<|endoftext|>"]
     )
 
 def train_bpe_expts_owt():
+    prefix="OpenWebText"
     train_bpe_common(
-        in_file=DATA_PATH / "owt_train.txt",
-        out_vocab_file=OUT_PATH / "owt_vocab.json",
-        out_merges_file=OUT_PATH / "owt_merges.txt",
-        vocab_size=32000,
+        in_file       =  DATA_PATH / f"{prefix}-train.txt",
+        out_vocab_file=  OUT_PATH  / f"{prefix}_vocab.json",
+        out_merges_file= OUT_PATH  / f"{prefix}_merges.txt",
+        vocab_size     = 32000,
         special_tokens=["<|endoftext|>"]
     )
 
@@ -93,5 +95,3 @@ if __name__ == "__main__":
 
     print("\n---Training BPE on OpenWebText---")
     train_bpe_expts_owt()
-    #print("\n---Training BPE on OpenWebSmall Samples for 300 vocab---")
-    #train_bpe_expts_sample()
