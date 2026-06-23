@@ -1,0 +1,28 @@
+MAC OS M3 
+uv run bpe_train.py
+---Training BPE on TinyStories...---
+
+Launching pre-tokenization across 12 parallel CPU workers...
+
+[System] Finished aggregating final vocabulary structures...
+Elapsed Time in PRETOKEN: 00:00:51.897
+Training BPE: 100%|█████████████████████████████████| 9743/9743 [00:34<00:00, 279.09it/s, freq=454, unique_words=59933]
+Elapsed Time in    TRAIN: 00:00:35.046
+Elapsed Time in    Format: 00:00:00.000
+Elapsed Time in    Total: 00:01:27.965
+Elapsed Time in Training: 00:01:27.967
+  Vocabulary size: 10000
+  Merges size: 9743
+
+---Training BPE on OpenWebText---
+
+Launching pre-tokenization across 12 parallel CPU workers...
+[System] Finished aggregating final vocabulary structures...
+Elapsed Time in PRETOKEN: 00:12:33.681
+Training BPE: 100%|█| 31743/31743 [4:36:55<00:00,  1.91it/s, freq=6412, unique_words=6.6e+6
+Elapsed Time in    TRAIN: 03:05:13.252
+Elapsed Time in    Format: 00:00:00.005
+Elapsed Time in    Total: 03:17:48.217
+Elapsed Time in Training: 03:17:48.385
+  Vocabulary size: 32000
+  Merges size: 31743

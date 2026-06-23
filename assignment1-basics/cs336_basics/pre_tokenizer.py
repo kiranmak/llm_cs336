@@ -94,6 +94,12 @@ class BPEPreTokenizer:
         # 3. Compile as a bytes regex
         self.special_split_regex = re.compile(pattern_bytes)
 
+        # Pre-encode special tokens to bytes for O(1) membership lookups
+        # in the loop
+        self.special_tokens_bytes = {t.encode("utf-8") if isinstance(t, str) else t
+                                  for t in self.special_tokens
+                               }
+
         self.bpe_regex = re.compile(
         rb"""'s|'t|'re|'ve|'m|'ll|'d| ?[a-zA-Z]+| ?[0-9]+| ?[^\s_a-zA-Z0-9]+|\s+(?!\S)|\s+""",
         re.IGNORECASE
@@ -113,18 +119,28 @@ class BPEPreTokenizer:
         match_details: Counter = Counter()
 
         # If raw_string is a string, we split it directly
-        pieces = self.special_split_regex.split(raw_string)
+        to_bytes = raw_string.encode("utf-8")
+        pieces = self.special_split_regex.split(to_bytes)
+        set_key = self.pretoken_bkey
 
+        # Localize lookups for speed
+        find_matches = self.bpe_regex.finditer
+
+        # pieces are bytes- not chars.
         for piece in pieces:
-            if not piece:
+            if not piece or piece in self.special_tokens_bytes:
                 continue
 
-            if piece in self.special_tokens:
-                match_details[self.pretoken_key(piece)] += 1
-            else:
-                for match in self.bpe_regex.finditer(piece):
-                    match_details[self.pretoken_key(match.group())] += 1
+            # finditer scans the bytes piece natively
+            for match in find_matches(piece):
+                # Extract raw bytes from the match
+                match_bytes = match.group()
 
+                # Decode ONLY the final matched token to string to
+                # store in your Counter
+                match_str = match_bytes.decode("utf-8", errors="ignore")
+
+                match_details[set_key(match_str)] += 1
         return match_details
 
     def log_pid(self, start, end):
@@ -139,7 +155,7 @@ class BPEPreTokenizer:
         Optimized worker function using memoryview to prevent OOM
         and minimize object allocations.
         """
-        fname, start, end, special_tokens_bytes, set_key = args
+        fname, start, end, set_key = args
 
         match_details: Counter = Counter()
 
@@ -157,7 +173,7 @@ class BPEPreTokenizer:
 
                 # pieces are bytes- not chars.
                 for piece in pieces:
-                    if not piece or piece in special_tokens_bytes:
+                    if not piece or piece in self.special_tokens_bytes:
                         continue
 
                     # finditer scans the bytes piece natively
