@@ -82,9 +82,22 @@ class BPEPreTokenizer:
         self.special_tokens = special_tokens
 
         escaped_tokens = [re.escape(t) for t in special_tokens]
-        self.special_split_regex = re.compile(f"({'|'.join(escaped_tokens)})")
+        # escaped_tokens is a list of string tokens:
+        # e.g., ["<|endoftext|>", "<|padding|>"]
 
-        self.bpe_regex = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        # 1. Encode each token into bytes
+        escaped_tokens_bytes = [token.encode("utf-8") for token in escaped_tokens]
+
+        # 2. Join them using a bytes separator b"|" and wrap in a bytes capture group
+        pattern_bytes = b"(" + b"|".join(escaped_tokens_bytes) + b")"
+
+        # 3. Compile as a bytes regex
+        self.special_split_regex = re.compile(pattern_bytes)
+
+        self.bpe_regex = re.compile(
+        rb"""'s|'t|'re|'ve|'m|'ll|'d| ?[a-zA-Z]+| ?[0-9]+| ?[^\s_a-zA-Z0-9]+|\s+(?!\S)|\s+""",
+        re.IGNORECASE
+        )
 
     @staticmethod
     def pretoken_key(text: str) -> tuple[str, ...]:
@@ -123,41 +136,63 @@ class BPEPreTokenizer:
 
     def pre_tokenize_chunk(self, args) -> Counter:
         """
-         Worker function made standalone so it can be cleanly picked 
-         and distributed across Ubuntu processes without serialization errors.
-         """
-        fname, start, end, special_tokens, special_split_regex, bpe_regex, set_key = args
+        Optimized worker function using memoryview to prevent OOM
+        and minimize object allocations.
+        """
+        fname, start, end, special_tokens_bytes, set_key = args
 
-        #self.log_pid(start, end)
         match_details: Counter = Counter()
 
-        # Open the file and memory-map it INSIDE the worker
         with open(fname, "rb") as f:
             with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-                chunk = mm[start:end].decode("utf-8")
-                pieces = self.special_split_regex.split(chunk)
+                # Convert the chunk slice into bytes immediately so the mmap
+                # object can be safely closed before returning.
+                chunk_bytes = bytes(mm[start:end])
+
+                # .split() on a bytes regex works on bytes and returns bytes objects.
+                pieces = self.special_split_regex.split(chunk_bytes)
+
+                # Localize lookups for speed
+                find_matches = self.bpe_regex.finditer
+
+                # pieces are bytes- not chars.
                 for piece in pieces:
-                    if not piece or piece in self.special_tokens:
+                    if not piece or piece in special_tokens_bytes:
                         continue
-                    for match in self.bpe_regex.finditer(piece):
-                        match_details[set_key(match.group())] += 1
+
+                    # finditer scans the bytes piece natively
+                    for match in find_matches(piece):
+                        # Extract raw bytes from the match
+                        match_bytes = match.group()
+
+                        # Decode ONLY the final matched token to string to
+                        # store in your Counter
+                        match_str = match_bytes.decode("utf-8", errors="ignore")
+
+                        match_details[set_key(match_str)] += 1
+
         return match_details
 
 
     def pre_tokenize_file(self, fname: str, encode_it: bool):
         start_time = time.perf_counter()
-        num_workers = 12
+        num_workers = 8 # 4 P-cores on my ultra 5.
         pre_tokens: Counter = Counter()
 
         with open(fname, "rb") as f:
-            boundaries = find_chunk_boundaries( f, num_workers, b"<|endoftext|>")
+            boundaries = find_chunk_boundaries(f, num_workers, b"<|endoftext|>")
 
         set_key = self.pretoken_bkey if encode_it else self.pretoken_key
         # split work
         ctx = multiprocessing.get_context('spawn')
 
-        print(f"Launching pre-tokenization across {num_workers} parallel CPU workers...")
+        print(f"Launching pre-tokenization across {num_workers} CPU workers...")
 
+        # Pre-encode special tokens to bytes for O(1) membership lookups
+        # in the loop
+        special_tokens_bytes = {t.encode("utf-8") if isinstance(t, str) else t
+                                  for t in self.special_tokens
+                               }
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=ctx) as executor:
             # Map submits all tasks simultaneously and yields results as they finish
             futures = []
@@ -167,9 +202,7 @@ class BPEPreTokenizer:
                     fname,
                     start,
                     end,
-                    self.special_tokens,
-                    self.special_split_regex,
-                    self.bpe_regex,
+                    special_tokens_bytes,
                     set_key)
                 futures.append(executor.submit(self.pre_tokenize_chunk, task_args))
 
