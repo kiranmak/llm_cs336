@@ -10,10 +10,6 @@ from dataclasses import dataclass
 from collections import defaultdict, Counter
 from tqdm import tqdm
 
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from cs336_basics.pre_tokenizer import BPEPreTokenizer, print_time
 
 class Tokenizer(ABC):

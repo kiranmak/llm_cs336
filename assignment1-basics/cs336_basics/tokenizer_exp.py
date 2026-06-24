@@ -7,16 +7,9 @@ import multiprocessing
 from array import array
 import numpy as np
 
-# Add the project root directory to python's import path before importing package modules
-"""
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-"""
-
 import re
 from cs336_basics.pre_tokenizer import print_time
-from cs336_basics.bpe_train import DATA_PATH, OUT_PATH
+from cs336_basics.paths import PROJECT_ROOT, DATA_PATH, OUT_PATH
 from cs336_basics.bpe_tokenizer import BPETokenizer, get_compression_ratio
 DATASET_TYPES = ["valid", "train", "samples"]
 
@@ -130,6 +123,16 @@ def main_file_encoder():
             )
     print(f"====== Encoding to NPY Finished ======")
 
+
+def file_encoder(dataset_prefix: str, dataset_type: str = "samples"):
+    roster = get_vocab_merge_fname(dataset_prefix, dataset_type)
+    encode_file_parallel(
+        txt_path   = roster["text"],
+        vocab_path = roster["vocab"],
+        merge_path = roster["merge"],
+        special_tokens = ["<|endoftext|>"],
+        out_path   = roster["npy"]
+    )
 
 
 if __name__ == "__main__":

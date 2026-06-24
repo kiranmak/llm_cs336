@@ -3,17 +3,9 @@ import json
 import pathlib
 import time
 
-# Add the project root directory to python's import path
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
+from cs336_basics.paths import PROJECT_ROOT, DATA_PATH, OUT_PATH
 from cs336_basics.pre_tokenizer import print_time
 from cs336_basics.bpe_tokenizer import bpe_tokenizer_fn
-
-DATA_PATH = PROJECT_ROOT / "data"
-OUT_PATH = PROJECT_ROOT / "out"
-OUT_PATH.mkdir(parents=True, exist_ok=True)
 
 def train_bpe_common(in_file, out_vocab_file, out_merges_file, vocab_size=1000, special_tokens=None):
     from tests.common import gpt2_bytes_to_unicode

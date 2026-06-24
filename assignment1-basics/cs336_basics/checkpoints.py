@@ -1,12 +1,12 @@
 
+import os
+import json
+from pathlib import Path
+
+from cs336_basics.paths import PROJECT_ROOT, DATA_PATH, OUT_PATH
 from cs336_basics.nn_utils import save_checkpoint, load_checkpoint
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 CHECKPOINT_PATH = PROJECT_ROOT / "checkpoints"
-from cs336_basics.bpe_train import DATA_PATH, OUT_PATH
 
 class CheckPtConfig:
     # Other chackpointing Configuration
@@ -74,7 +74,8 @@ def checkpoint_hyperparams(config_params, tokenfile):
 
     with open(checkpt_params_path, "w") as fh:
         json.dump(params_dict, fh, indent=4)
-    print(f"=== Hyper parameters written {checkpt_params_path}===")
+    relative = Path(checkpt_params_path).relative_to(Path(config_params.checkpoint.dir))
+    print(f"=== Hyper parameters written {relative}===")
 
 
 def load_hyperparams(checkpt_params_path):

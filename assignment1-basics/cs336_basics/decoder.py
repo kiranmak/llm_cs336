@@ -14,7 +14,7 @@ We recommend that you support the following features:
 
 """
 To provide the model with a sequence of prefix tokens ("prompt") and
-get the next-token probability distribution, you need to perform the 
+get the next-token probability distribution, you need to perform the
 following steps:
 
     1. Tokenize the prompt: Convert the string prompt into a list/tensor of token IDs
@@ -31,44 +31,108 @@ following steps:
     6. Apply temperature and nucleus (top-p) sampling: Adjust the logits
        and convert them to a probability distribution using softmax.
 """
+from cs336_basics.optim import AdamW
+from cs336_basics.transformer import TransformerModel
 from tests.test_tokenizers import get_tokenizer_from_vocab_merges_path
 from cs336_basics.run import load_hyperparams, CHECKPOINT_PATH
-from cs336_basics.bpe_train import DATA_PATH, OUT_PATH
+from cs336_basics.checkpoints import checkpoint_resume
+from cs336_basics.paths import PROJECT_ROOT, DATA_PATH, OUT_PATH
+import os
+import math
+from pathlib import Path
+import torch
 
-def decoding(prompt_string, vocab_path, device):
+
+def get_bpe_params_for_dataset(tokenfile):
+    # Get only the name
+    tokens_topic = Path(tokenfile).stem
+    vocab_file = OUT_PATH / f"{tokenfile}_vocab.json"
+    merge_file = OUT_PATH / f"{tokenfile}_merges.txt"
+    return vocab_file, merge_file
+
+def decoding(prompt_text, hp, vocab_path, merges_path, device=None):
+    if device is None:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
 
     checkpt_params_path = os.path.join(CHECKPOINT_PATH,
                                        f"hyperparams.json")
-    hp = load_hyperparams(CHECKPOINT_PATH)
+    hp, tokenfile = load_hyperparams(CHECKPOINT_PATH)
     vocab_size = hp.vocab_size
     num_layers = hp.num_layers
+    context_length = hp.context_length
     batch_size = hp.batch_size
     num_heads  = hp.num_heads
     d_ff       = hp.d_ff
     d_model    = hp.d_model
     rope_theta = hp.rope_theta
 
+    # initialized weights 0:
     model = TransformerModel(vocab_size, d_model,
                              context_length, rope_theta,
                              num_heads, d_ff, num_layers).to(device)
-    model.to(device)
-    vocab_path = OUT
+    optimizer = AdamW(model.parameters(),
+                      lr=1e-3,
+                      weight_decay=0.01,
+                      betas=(0.9, 0.999), eps=1e-8,)
 
-    tokenizer = get_tokenizer_from_vocab_merges_path(
-            vocab_path,
-            merges_path)
-    encoded_tokens = tokenizer.encode(prompt_string)
-    token_ids = torch.tensor(encoded_tokens).unsqueeze(0).to(device)
+    chkpt = hp.checkpoint
+    checkpoint_resume(model, optimizer, chkpt)
+
+    tokenizer = get_tokenizer_from_vocab_merges_path(vocab_path, merges_path)
+    encoded_tokens = tokenizer.encode(prompt_text)
+
+    # ... your existing code ends here ...
+    token_ids = torch.tensor(encoded_tokens).unsqueeze(0).to(device) # Shape: (1, prompt_length)
+
+    # 1. Define your max tokens to generate
+    max_tokens = 50
+    temperature = 0.7  # Controls randomness (optional)
+
+    # 2. Put model in evaluation mode
+    model.eval()
+    # 3. Start generation loop
+
+    with torch.no_grad():
+      for _ in range(max_tokens):
+         # limit the input context if it exceeds context length
+         # (Takes the tail of input sequence of size 'context_length')
+         input_context = token_ids[:, -context_length:]
+
+         # Pass the token-ids into your model
+         # Output logits shape: (Batch_Size, Current_Sequence_Length, Vocab_Size)
+         logits = model(input_context)
+
+         # Pluck out ONLY the logits for the very last token in the sequence
+         # Shape changes from (1, T, Vocab_Size) -> (1, Vocab_Size)
+         next_token_logits = logits[:, -1, :]
+
+         # --- SAMPLING STRATEGY ---
+         next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+
+         # Append the new token index to your running sequence matrix along the time dimension
+         token_ids = torch.cat((token_ids, next_token), dim=1)
+
+         # Optional: Stop early if the model generates an End-of-String (EOS) token ID
+         if next_token.item() == tokenizer.eos_token_id:
+            break
+    # After the loop finishes, token_ids holds the full generated sequence
+    # Convert token IDs back to readable text
+    full_text = tokenizer.decode(token_ids[0])
+    print(f"\n--- Generated Text ---\n{full_text}")
 
 def  prompt():
     # The input is automatically treated as a string type
-    user_text = input("Ask something: ")
+    #user_text = input("Ask something: ")
+    user_text = "When we think about a nice cozy evening, the first thing that comes to"
     return user_text + "|<endoftext>|"
 
 if __name__ == "__main__":
     prompt_text = prompt()
-    src_file = "TinyStories"
-    VOCAB_FILE =  OUT_PATH / f"{src_file}_vocab.json"
-    MERGES_FILE = OUT_PATH / f"{src_file}_merges.txt"
-    decoding(prompt_text, vocab_file)
-
+    hp, tokenfile = load_hyperparams(CHECKPOINT_PATH)
+    vocab_path, merge_path = get_bpe_params_for_dataset(tokenfile)
+    decoding(prompt_text, hp, vocab_path, merge_path)
