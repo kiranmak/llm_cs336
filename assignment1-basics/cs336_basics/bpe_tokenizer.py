@@ -335,10 +335,11 @@ def update_bpe_indexes(
     corpus_words: dict[tuple[int, ...], int],
     pair_counts: dict[tuple[int, int], int],
     pair_to_words: dict[tuple[int, int], set[tuple[int, ...]]]
-) -> None:
+) -> set[tuple[int, int]]:
     """
     Step 3: Mutate global dictionaries in-place by localized modifications.
     """
+    changed_pairs = set()
     for old_word in list(affected_words):
         if old_word not in corpus_words:
             continue
@@ -354,6 +355,7 @@ def update_bpe_indexes(
                 if pair_counts[pr] <= 0:
                     pair_counts.pop(pr, None)
                     pair_to_words.pop(pr, None)
+                changed_pairs.add(pr)
 
         # B. Construct the newly merged word structure
         new_word = merge_tokens_in_word(old_word, best_pair, next_token_id)
@@ -364,12 +366,33 @@ def update_bpe_indexes(
             pr = (new_word[j], new_word[j + 1])
             pair_counts[pr] += freq
             pair_to_words[pr].add(new_word)
+            changed_pairs.add(pr)
+
+    return changed_pairs
+
+
+# heap chnage done by AI code
+class ReverseBytes:
+    """
+    Wrapper for bytes objects to reverse their comparison order.
+    Used for breaking ties in the min-heap where we want the lexicographically
+    largest bytes to be selected first.
+    """
+    __slots__ = ('val',)
+    def __init__(self, val: bytes):
+        self.val = val
+    def __lt__(self, other):
+        return self.val > other.val
+    def __eq__(self, other):
+        return self.val == other.val
 
 
 def train_bpe_on_corpus(pre_tokens: Counter, num_merges: int) -> BPETokenizerParams:
     """
     Main driver orchestrating BPE training.
     """
+    import heapq
+
     merges: dict[tuple[int, int], int] = {}
     vocab: dict[int, bytes] = {x: bytes([x]) for x in range(256)}
     next_token_id = 256
@@ -378,20 +401,31 @@ def train_bpe_on_corpus(pre_tokens: Counter, num_merges: int) -> BPETokenizerPar
     # 1. create inverse list  of tokens indices
     pair_counts, pair_to_words = inverse_indexing_token_pairs(corpus_words)
 
+    # Initialize priority queue
+    # elements are: (-count, ReverseBytes(vocab[p0]), ReverseBytes(vocab[p1]), p)
+    # We use -count for max-heap behavior (heappop will return the smallest value, i.e. largest count).
+    # Ties are broken lexicographically by the bytes representation of the pair's tokens.
+    heap = []
+    for pr, count in pair_counts.items():
+        heap.append((-count, ReverseBytes(vocab[pr[0]]), ReverseBytes(vocab[pr[1]]), pr))
+    heapq.heapify(heap)
+
     progress_bar = tqdm(range(num_merges), desc="Training BPE", leave=True)
 
     for m in progress_bar:
-        if not pair_counts:
-            progress_bar.set_postfix_str("No more pairs left to merge.")
-            break
+        # Find the next valid best pair from the heap
+        best_pair = None
+        # heap chnage done by AI code
+        while heap:
+            neg_count, v0, v1, pr = heapq.heappop(heap)
+            # Check if this heap entry is up-to-date with current pair_counts
+            if pr in pair_counts and pair_counts[pr] == -neg_count:
+                best_pair = pr
+                break
 
-        # 2. Pick the winner based on frequency and token ID sorting
-        best_pair = max(
-            pair_counts,
-            key=lambda p: (pair_counts[p], vocab[p[0]], vocab[p[1]])
-        )
-
-        if pair_counts[best_pair] <= 0:
+        if best_pair is None or pair_counts[best_pair] <= 0:
+            if not best_pair:
+                progress_bar.set_postfix_str("No more pairs left to merge.")
             break
 
         # 3. Register the new token
@@ -410,10 +444,16 @@ def train_bpe_on_corpus(pre_tokens: Counter, num_merges: int) -> BPETokenizerPar
         pair_counts.pop(best_pair, None)
 
         # 5. Localized vocabulary adjustment via helper
-        update_bpe_indexes(
+        changed_pairs = update_bpe_indexes(
             affected_words, best_pair, next_token_id,
             corpus_words, pair_counts, pair_to_words
         )
+        # heap chnage done by AI code
+        # Push any updated pairs to the heap
+        for pr in changed_pairs:
+            count = pair_counts.get(pr, 0)
+            if count > 0:
+                heapq.heappush(heap, (-count, ReverseBytes(vocab[pr[0]]), ReverseBytes(vocab[pr[1]]), pr))
 
         next_token_id += 1
 

@@ -204,11 +204,6 @@ class BPEPreTokenizer:
 
         print(f"Launching pre-tokenization across {num_workers} CPU workers...")
 
-        # Pre-encode special tokens to bytes for O(1) membership lookups
-        # in the loop
-        special_tokens_bytes = {t.encode("utf-8") if isinstance(t, str) else t
-                                  for t in self.special_tokens
-                               }
         with ProcessPoolExecutor(max_workers=num_workers, mp_context=ctx) as executor:
             # Map submits all tasks simultaneously and yields results as they finish
             futures = []
@@ -218,7 +213,6 @@ class BPEPreTokenizer:
                     fname,
                     start,
                     end,
-                    special_tokens_bytes,
                     set_key)
                 futures.append(executor.submit(self.pre_tokenize_chunk, task_args))
 

@@ -89,8 +89,8 @@ def train_bpe_expts_owt():
 
 
 if __name__ == "__main__":
-    print("---Training BPE on TinyStories...---")
-    train_bpe_tinystories()
+    #print("---Training BPE on TinyStories...---")
+    #train_bpe_tinystories()
 
     print("\n---Training BPE on OpenWebText---")
     train_bpe_expts_owt()
