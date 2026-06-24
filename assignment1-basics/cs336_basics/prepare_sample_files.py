@@ -25,6 +25,7 @@ def get_random_access_block(file_path, keyword):
                 return f.tell() - len(buffer) + idx
             if len(buffer) > len(keyword_bytes):
                 buffer = buffer[-len(keyword_bytes):]
+        return None
 
     def _read_until_next_keyword(f):
         result = bytearray(keyword_bytes)
@@ -51,7 +52,7 @@ def get_random_access_block(file_path, keyword):
         return None
 
     with open(file_path, "rb") as f:
-        for _ in range(10):
+        for _ in range(11000):
             start_pos = random.randrange(file_size)
             f.seek(start_pos)
 
@@ -62,18 +63,18 @@ def get_random_access_block(file_path, keyword):
             blocks.append(_read_until_next_keyword(f))
 
     if not blocks:
-        return None
-
-    return random.choice(blocks).decode("utf-8", errors="replace")
+        return ""
+    result = b"".join(blocks)
+    return result.decode("utf-8")
 
 # Example usage
-input_files = ["TinyStoriesV2-GPT4-train.txt","owt_train.txt"]
-output_files = ["TinyStoriesV2-GPT4-samples.txt","owt_samples.txt"]
+input_files = ["TinyStoriesV2-GPT4-train.txt","OpenWebText-train.txt"]
+output_files = ["TinyStoriesV2-GPT4-samples.txt","OpenWebText-samples.txt"]
 KEYWORD = "<|endoftext|>"
-for i in range(len(input_files)):
+for i in range(len(input_files) -1):
     in_file=DATA_PATH / input_files[i]
     out_file=DATA_PATH / output_files[i]
     result = get_random_access_block(in_file, KEYWORD)
-    with open(out_file, "w") as f:
+    with open(out_file, "w", encoding="utf-8") as f:
         f.write(result)
     f.close()
