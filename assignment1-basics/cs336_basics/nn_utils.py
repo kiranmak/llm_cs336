@@ -40,12 +40,13 @@ def cross_entropy_loss(logits, targets):
     sum_exp = torch.sum(torch.exp(logits - max_val), dim=-1, keepdim=True)
     log_sum_exp = torch.log(sum_exp) + max_val
 
-    # 2. Convert integer targets to a one-hot encoded matrix
-    # If logits is (B, C), targets_one_hot becomes (B, C)
+    """
     x = F.one_hot(targets, num_classes=logits.size(-1))
-
-    # 3. Use einsum to extract the correct target logits
     x_logits = einsum(logits, x.float(), 'b c, b c -> b')
+    #Replace above one-hot + einsum with gather (same math, much faster,
+    # still passes your tests):
+    """
+    x_logits = logits.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
 
     # 4. flatten: log_sum_exp frpm (B, 1) to (B,)
     loss = -x_logits + log_sum_exp.squeeze(-1)

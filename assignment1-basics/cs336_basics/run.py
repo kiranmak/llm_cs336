@@ -34,13 +34,12 @@ def training_together(dataset, config_params, device, resume):
     total_batches = len(dataset) // (batch_size)
     # initialized weights 0:
     model = TransformerModel(vocab_size, d_model,
-                             context_length, rope_theta,
-                             num_heads, d_ff, num_layers).to(device)
-    model.to(device)
+                            context_length, rope_theta,
+                            num_heads, d_ff, num_layers).to(device)
     optimizer = AdamW(model.parameters(),
-                      lr=1e-3,
-                      weight_decay=0.01,
-                      betas=(0.9, 0.999), eps=1e-8,)
+                    lr=1e-3,
+                    weight_decay=0.01,
+                    betas=(0.9, 0.999), eps=1e-8,)
 
     global_step = 0
     chkpt = config_params.checkpoint
@@ -55,10 +54,10 @@ def training_together(dataset, config_params, device, resume):
 
         for step in range(total_batches):
             X, Y = get_batch( dataset, batch_size, context_length, device,)
-            X, Y = X.to(device), Y.to(device)
+            #X, Y = X.to(device), Y.to(device)
 
             # 1. Clear out previously accumulated gradients
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
             # 2. Forward pass: compute predicted logits from inputs
             # X shape: (B, T) -> Logits shape: (B, T, Vocab_Size)
@@ -79,17 +78,17 @@ def training_together(dataset, config_params, device, resume):
             optimizer.step()
 
             global_step += 1
-            epoch_loss += loss.item()
             if global_step % chkpt_interval == 0:
                 checkpoint_sync(model, optimizer,
                                     global_step, chkpt)
 
 
-            if step % 10 == 0:
+            if step % 100 == 0:
+                epoch_loss += loss.item()
                 # Calculate Perplexity dynamically from our loss value
                 perplexity = torch.exp(torch.tensor(loss.item())).item()
                 print(f"Epoch {epoch+1}/{total_epochs} | Step {step:3d} |",
-                      f"Loss: {loss.item():.4f} | PPL: {perplexity:.2f}")
+                    f"Loss: {loss.item():.4f} | PPL: {perplexity:.2f}")
 
         avg_epoch_loss = epoch_loss / total_batches
         print(f"=== Final Checkpoint ===")
@@ -98,6 +97,8 @@ def training_together(dataset, config_params, device, resume):
 
 
 def run_main():
+
+    torch.set_num_threads(os.cpu_count() - 2)
 
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument('--debug', action='store_true', default=False)
@@ -120,8 +121,8 @@ def run_main():
         sys.exit(1)
     args = args_parser.parse_args()
     if args.tokenfile == None:
-       print("Token file is a mandatory input, please provide the path to the token file.")
-       exit(1)
+        print("Token file is a mandatory input, please provide the path to the token file.")
+        sys.exit(1)
 
     hyper_params = ConfigParams(args.batch_size, args.contextlen,
                                 args.vocab, args.d_model,
@@ -155,7 +156,11 @@ def run_main():
 
     token_npy_path = OUT_PATH / f"{args.tokenfile}-samples.npy"
     print("Loading dataset from", token_npy_path)
-    dataset = np.load(token_npy_path, mmap_mode="r")
+    size_gb = token_npy_path.stat().st_size / (1024**3)
+    if size_gb < 20:  # tune threshold to your machine
+        dataset = np.load(token_npy_path)
+    else:
+        dataset = np.load(token_npy_path, mmap_mode="r")
     print("Corpus size: ", len(dataset))
     training_together(dataset, hyper_params, args.device, args.resume)
 
