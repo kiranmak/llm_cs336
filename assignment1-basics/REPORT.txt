@@ -26,3 +26,117 @@ Elapsed Time in    Total: 03:17:48.217
 Elapsed Time in Training: 03:17:48.385
   Vocabulary size: 32000
   Merges size: 31743
+
+====== 26 June ==== CPU  === create samples valid and merges
+ uv run cs336_basics/bpe_train.py
+---Training BPE on TinyStories...---
+
+Launching pre-tokenization across 8 CPU workers...
+
+[System] Finished aggregating final vocabulary structures...
+Elapsed Time in PRETOKEN: 00:01:11.791
+Training BPE: 100%|██████| 9743/9743 [00:02<00:00, 3631.41it/s, freq=454, unique_words=6e+4]
+Elapsed Time in    TRAIN: 00:00:02.834
+Elapsed Time in    Format: 00:00:00.001
+Elapsed Time in    Total: 00:01:15.636
+Elapsed Time in Training: 00:01:15.639
+  Vocabulary size: 10000
+  Merges size: 9743
+
+Launching pre-tokenization across 8 CPU workers...
+
+[System] Finished aggregating final vocabulary structures...
+Elapsed Time in PRETOKEN: 00:00:00.406
+Training BPE: 100%|███████| 9743/9743 [00:00<00:00, 31891.78it/s, freq=2, unique_words=9644]
+Elapsed Time in    TRAIN: 00:00:00.321
+Elapsed Time in    Format: 00:00:00.001
+Elapsed Time in    Total: 00:00:01.731
+Elapsed Time in Training: 00:00:01.732
+  Vocabulary size: 10000
+  Merges size: 9743
+
+Launching pre-tokenization across 8 CPU workers...
+
+[System] Finished aggregating final vocabulary structures...
+Elapsed Time in PRETOKEN: 00:00:00.825
+Training BPE: 100%|██████| 9743/9743 [00:00<00:00, 23086.62it/s, freq=5, unique_words=13117]
+Elapsed Time in    TRAIN: 00:00:00.441
+Elapsed Time in    Format: 00:00:00.001
+Elapsed Time in    Total: 00:00:02.271
+Elapsed Time in Training: 00:00:02.272
+  Vocabulary size: 10000
+  Merges size: 9743
+
+---Training BPE on OpenWebText---
+
+Launching pre-tokenization across 8 CPU workers...
+
+[System] Finished aggregating final vocabulary structures...
+Elapsed Time in PRETOKEN: 00:06:14.786
+Training BPE: 100%|██| 31743/31743 [13:08<00:00, 40.26it/s, freq=6402, unique_words=6420296]
+Elapsed Time in    TRAIN: 00:14:12.168
+Elapsed Time in    Format: 00:00:00.014
+Elapsed Time in    Total: 00:20:28.244
+Elapsed Time in Training: 00:20:28.483
+  Vocabulary size: 32000
+  Merges size: 31743
+
+Launching pre-tokenization across 8 CPU workers...
+
+[System] Finished aggregating final vocabulary structures...
+Elapsed Time in PRETOKEN: 00:00:00.117
+Training BPE:   5%|▏  | 1703/31743 [00:00<00:00, 53904.61it/s, No more pairs left to merge.]
+Elapsed Time in    TRAIN: 00:00:00.035
+Elapsed Time in    Format: 00:00:00.000
+Elapsed Time in    Total: 00:00:01.153
+Elapsed Time in Training: 00:00:01.153
+  Vocabulary size: 1960
+  Merges size: 1703
+
+Launching pre-tokenization across 8 CPU workers...
+
+[System] Finished aggregating final vocabulary structures...
+Elapsed Time in PRETOKEN: 00:00:08.583
+Training BPE: 100%|███| 31743/31743 [00:51<00:00, 620.84it/s, freq=158, unique_words=620299]
+Elapsed Time in    TRAIN: 00:00:53.573
+Elapsed Time in    Format: 00:00:00.009
+Elapsed Time in    Total: 00:01:03.204
+Elapsed Time in Training: 00:01:03.244
+  Vocabulary size: 32000
+  Merges size: 31743
+
+====== Encoding text to NPY ======
+Parallel Encode data/OpenWebText-valid.txt -> out/OpenWebText-valid.npy.
+Using 17 processes.
+Total Tokens: 64378804
+Elapsed Time in Encoding: 00:00:34.325
+Elapsed Time in Convert NPY: 00:00:00.584
+Parallel Encode data/OpenWebText-train.txt -> out/OpenWebText-train.npy.
+Using 17 processes.
+Total Tokens: 2648001920
+Elapsed Time in Encoding: 00:20:39.727
+Elapsed Time in Convert NPY: 00:00:41.379
+Parallel Encode data/OpenWebText-samples.txt -> out/OpenWebText-samples.npy.
+Using 17 processes.
+Total Tokens: 2235
+Elapsed Time in Encoding: 00:00:00.062
+Elapsed Time in Convert NPY: 00:00:00.000
+====== Encoding to NPY Finished ======
+====== Encoding text to NPY ======
+Parallel Encode data/TinyStoriesV2-GPT4-valid.txt -> out/TinyStoriesV2-GPT4-valid.npy.
+Using 17 processes.
+Total Tokens: 5492629
+Elapsed Time in Encoding: 00:00:09.244
+Elapsed Time in Convert NPY: 00:00:00.039
+Parallel Encode data/TinyStoriesV2-GPT4-train.txt -> out/TinyStoriesV2-GPT4-train.npy.
+Using 17 processes.
+Total Tokens: 544218220
+Elapsed Time in Encoding: 00:03:21.024
+Elapsed Time in Convert NPY: 00:00:07.182
+Parallel Encode data/TinyStoriesV2-GPT4-samples.txt -> out/TinyStoriesV2-GPT4-samples.npy.
+Using 17 processes.
+Total Tokens: 2202771
+Elapsed Time in Encoding: 00:00:05.942
+Elapsed Time in Convert NPY: 00:00:00.015
+====== Encoding to NPY Finished ======
+

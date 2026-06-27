@@ -20,11 +20,10 @@ def get_vocab_merge_fname(prefix, flagtype: str):
 
     f_roster = {}
     f_roster["text"]  = DATA_PATH / f"{prefix}-{flagtype}.txt"
-    f_roster["vocab"] = OUT_PATH / f"{prefix}_vocab.json"
-    f_roster["merge"] = OUT_PATH / f"{prefix}_merges.txt"
+    f_roster["vocab"] = OUT_PATH / f"{prefix}-{flagtype}_vocab.json"
+    f_roster["merge"] = OUT_PATH / f"{prefix}-{flagtype}_merges.txt"
     f_roster["npy"]   = OUT_PATH / f"{prefix}-{flagtype}.npy"
     #print("------ FILES to work with-----")
-    current_dir = Path.cwd()
     for k,v in f_roster.items():
         if k != "npy":
             try:
@@ -109,7 +108,8 @@ def encode_file_parallel(txt_path: Path,
 
 def main_file_encoder():
     print(f"====== Encoding text to NPY ======")
-    file_prefix = ["OpenWebText"]
+    #file_prefix = ["OpenWebText"]
+    file_prefix = ["TinyStoriesV2-GPT4"]
     #file_prefix = ["TinyStoriesV2-GPT4", "OpenWebText"]
     for in_file in file_prefix:
         for dataset in DATASET_TYPES:

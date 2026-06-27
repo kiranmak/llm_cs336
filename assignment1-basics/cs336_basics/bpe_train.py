@@ -63,8 +63,22 @@ def train_bpe_tinystories():
     prefix="TinyStoriesV2-GPT4"
     train_bpe_common(
         in_file       =  DATA_PATH / f"{prefix}-train.txt",
-        out_vocab_file=  OUT_PATH  / f"{prefix}_vocab.json",
-        out_merges_file= OUT_PATH  / f"{prefix}_merges.txt",
+        out_vocab_file=  OUT_PATH  / f"{prefix}-train_vocab.json",
+        out_merges_file= OUT_PATH  / f"{prefix}-train_merges.txt",
+        vocab_size     = 10000,
+        special_tokens=["<|endoftext|>"]
+    )
+    train_bpe_common(
+        in_file       =  DATA_PATH / f"{prefix}-samples.txt",
+        out_vocab_file=  OUT_PATH  / f"{prefix}-samples_vocab.json",
+        out_merges_file= OUT_PATH  / f"{prefix}-samples_merges.txt",
+        vocab_size     = 10000,
+        special_tokens=["<|endoftext|>"]
+    )
+    train_bpe_common(
+        in_file       =  DATA_PATH / f"{prefix}-valid.txt",
+        out_vocab_file=  OUT_PATH  / f"{prefix}-valid_vocab.json",
+        out_merges_file= OUT_PATH  / f"{prefix}-valid_merges.txt",
         vocab_size     = 10000,
         special_tokens=["<|endoftext|>"]
     )
@@ -73,16 +87,32 @@ def train_bpe_expts_owt():
     prefix="OpenWebText"
     train_bpe_common(
         in_file       =  DATA_PATH / f"{prefix}-train.txt",
-        out_vocab_file=  OUT_PATH  / f"{prefix}_vocab.json",
-        out_merges_file= OUT_PATH  / f"{prefix}_merges.txt",
+        out_vocab_file=  OUT_PATH  / f"{prefix}-train_vocab.json",
+    out_merges_file= OUT_PATH  / f"{prefix}-train_merges.txt",
+        vocab_size     = 32000,
+        special_tokens=["<|endoftext|>"]
+    )
+
+    train_bpe_common(
+        in_file       =  DATA_PATH / f"{prefix}-samples.txt",
+        out_vocab_file=  OUT_PATH  / f"{prefix}-samples_vocab.json",
+        out_merges_file= OUT_PATH  / f"{prefix}-samples_merges.txt",
+        vocab_size     = 32000,
+        special_tokens=["<|endoftext|>"]
+    )
+
+    train_bpe_common(
+        in_file       =  DATA_PATH / f"{prefix}-valid.txt",
+        out_vocab_file=  OUT_PATH  / f"{prefix}-valid_vocab.json",
+        out_merges_file= OUT_PATH  / f"{prefix}-valid_merges.txt",
         vocab_size     = 32000,
         special_tokens=["<|endoftext|>"]
     )
 
 
 if __name__ == "__main__":
-    #print("---Training BPE on TinyStories...---")
-    #train_bpe_tinystories()
+    print("---Training BPE on TinyStories...---")
+    train_bpe_tinystories()
 
     print("\n---Training BPE on OpenWebText---")
     train_bpe_expts_owt()
