@@ -224,7 +224,7 @@ class BPETokenizer(Tokenizer):
                 continue
             merges[(id1, id2)] = id_new
 
-        return cls(BPETokenizerParams(vocab, merges))
+        return cls(BPETokenizerParams(vocab, merges), special_tokens=special_tokens)
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterable[int]:
         for text in iterable:
