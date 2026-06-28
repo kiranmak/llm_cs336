@@ -391,7 +391,7 @@ def run_transformer_lm(
         next-word distribution for each token.
     """
     from cs336_basics.transformer import TransformerModel
-    model = TransformerModel(vocab_size, d_model, context_length, rope_theta, num_heads, d_ff, num_layers)
+    model = TransformerModel(vocab_size, d_model, context_length, rope_theta, num_heads, d_ff, num_layers, dtype=None, device=None)
     model.load_state_dict(weights)
     return model(in_indices)
 

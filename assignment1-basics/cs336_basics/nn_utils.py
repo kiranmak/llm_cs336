@@ -112,6 +112,14 @@ def get_batch(dataset: npt.NDArray, batch_size: int,
               ) -> tuple[torch.Tensor, torch.Tensor]:
 
     import numpy as np
+    if dataset.ndim != 1:
+        raise ValueError(f"dataset must be 1D, got shape {dataset.shape}")
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
+    if context_length <= 0:
+        raise ValueError(f"context_length must be positive, got {context_length}")
+
+
     potential_start_indices = len(dataset) - context_length
     start_indices = np.random.randint(0, potential_start_indices, size=batch_size)
 

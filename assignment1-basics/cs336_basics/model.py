@@ -55,7 +55,9 @@ class ModelEmbeddings(nn.Module):
                     )
 
     def set_weights(self, wts: Float[Tensor, " num_embeddings  embedding_dim"]):
-        self.weight = nn.Parameter(wts.clone().to(device=self.device, dtype=self.dtype),requires_grad=True)
+        self.weight = nn.Parameter(wts.clone().to(device=self.device,
+                                                  dtype=self.dtype),
+                                                  requires_grad=True)
 
     def forward(self, token_ids: Int[Tensor, " ..."]) -> torch.Tensor:
         """
@@ -76,12 +78,14 @@ class ModelRMS(nn.Module):
             dtype: torch.dtype | None = None Data type of the parameters
         """
         super(ModelRMS, self).__init__()
-        self.device = device
-        self.dtype  = dtype
+        # Fallback to CPU or let PyTorch handle it if None is passed
+        self.device = device if device is not None else torch.device("cpu")
+        self.dtype = dtype if dtype is not None else torch.float32
+
         self.d_model = d_model # model dimensionality
         self.eps = eps # epsilon value for numerical stability
 
-        w = torch.empty(d_model, device=device, dtype=dtype)
+        w = torch.empty(d_model, device=self.device, dtype=self.dtype)
         nn.init.trunc_normal_(w)
         self.weight = nn.Parameter(w, requires_grad=True)
 
@@ -130,9 +134,12 @@ class ModelSwiGLU(nn.Module):
             w2_weight (Float[Tensor, "d_model d_ff"]): Stored weights for W2
             w3_weight (Float[Tensor, "d_ff d_model"]): Stored weights for W3
         """
-        self.w1.weight.data = w1_weight.clone().to(device=self.device, dtype=self.dtype)
-        self.w2.weight.data = w2_weight.clone().to(device=self.device, dtype=self.dtype)
-        self.w3.weight.data = w3_weight.clone().to(device=self.device, dtype=self.dtype)
+        self.w1.weight.data = w1_weight.clone().to(
+                                device=self.device, dtype=self.dtype)
+        self.w2.weight.data = w2_weight.clone().to(
+                                device=self.device, dtype=self.dtype)
+        self.w3.weight.data = w3_weight.clone().to(
+                                device=self.device, dtype=self.dtype)
 
     def forward(self, x: torch.Tensor)-> torch.Tensor:
         """

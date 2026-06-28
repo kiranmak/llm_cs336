@@ -77,7 +77,8 @@ Following A. Vaswani et al. [8], set 𝑑𝑘=𝑑𝑣=𝑑modelℎ. To test you
 """
 class MultiheadSelfAttention(torch.nn.Module):
 
-    def __init__(self, d_model: int, num_heads: int, device=None, dtype=None):
+    def __init__(self, d_model: int, num_heads: int,
+                 device=None, dtype=None):
         """
         Args:
             d_model (int): Dimensionality of the feedforward input and output.

@@ -5,48 +5,9 @@ from pathlib import Path
 
 from cs336_basics.paths import PROJECT_ROOT, DATA_PATH, OUT_PATH
 from cs336_basics.nn_utils import save_checkpoint, load_checkpoint
+from cs336_basics.configs import get_default_config, ConfigParams
 
 CHECKPOINT_PATH = PROJECT_ROOT / "checkpoints"
-
-class CheckPtConfig:
-    # Other chackpointing Configuration
-    def __init__(self):
-        self.dir = CHECKPOINT_PATH
-        os.makedirs(self.dir, exist_ok=True)
-        self.interval = 5000 # Save every 5,000 steps
-        self.max_keep = 3    # Keep only the 3 most recent full states
-        self.saved_paths = []
-
-class ConfigParams:
-    def __init__(self, batch_size, context_length, vocab_size, d_model,
-                       d_ff, num_layers, num_heads, theta, epochs=3):
-        self.batch_size     = batch_size
-        self.context_length = context_length
-        self.vocab_size     = vocab_size
-        self.d_model        = d_model
-        self.d_ff           = d_ff
-        self.num_layers     = num_layers
-        self.num_heads      = num_heads
-        self.rope_theta     = theta
-        self.epochs         = epochs
-        self.checkpoint     = CheckPtConfig()
-
-    def show(self):
-        print("     batch_size     =", self.batch_size)
-        print("     context_length =", self.context_length)
-        print("     vocab_size     =", self.vocab_size)
-        print("     d_model        =", self.d_model)
-        print("     d_ff           =", self.d_ff)
-        print("     num_layers     =", self.num_layers)
-        print("     num_heads      =", self.num_heads)
-        print("     rope_theta     =", self.rope_theta)
-        print("     epochs         =", self.epochs)
-        print("     Checkpoints:");
-        print("         dir      =", self.checkpoint.dir)
-        print("         interval =", self.checkpoint.interval)
-        print("         max_save =", self.checkpoint.max_keep)
-        print("         interval =", self.checkpoint.saved_paths)
-
 
 def checkpoint_hyperparams(config_params, tokenfile):
     # Build a JSON-serializable dict containing only primitive fields
