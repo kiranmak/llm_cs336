@@ -134,14 +134,14 @@ def checkpoint_sync(model, optimizer, global_step, chkpt):
             print(f"[CLEANUP] Deleted old checkpoint: {oldest_checkpoint}")
 
 def checkpoint_resume(model, optimizer, chkpt):
-    from pathlib import Path
-    checkpoint_dir = Path(chkpt.dir)
+    checkpoint_dir = Path("./checkpoints")
     if not checkpoint_dir.exists():
         print(f"Checkpoint directory {chkpt.dir} does not exist.")
         return 0
 
     # Filter for files only, then pick the one with the maximum modification time
-    files = [f for f in checkpoint_dir.iterdir() if f.is_file() and f.name.endswith(".pt")]
+    files = [f for f in checkpoint_dir.iterdir()
+                if f.is_file() and f.name.endswith(".pt")]
     if not files:
         print(f"No checkpoints found in {chkpt.dir}.")
         return 0

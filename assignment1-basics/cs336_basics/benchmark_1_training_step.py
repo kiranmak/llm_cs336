@@ -6,9 +6,8 @@ from cs336_basics.paths import OUT_PATH
 
 torch.set_num_threads(os.cpu_count() - 2)
 device = torch.device('cpu')
-batch_size, context_length, vocab_size = 32, 256, 32000
-d_model, d_ff, num_layers, num_heads, rope_theta = 512, 1408, 4, 16, 10000
-
+batch_size, context_length, vocab_size = 256, 256, 32000
+d_model, d_ff, num_layers, num_heads, rope_theta = 512, 1344, 4, 16, 10000
 
 def benchmark_cpu_training_step(dataset, model, optimizer):
     # warmup
@@ -61,7 +60,8 @@ def estimate_gpu_step_time(params, batch_size, context_length,
 
 
 if __name__ == "__main__":
-    dataset = np.load(OUT_PATH / "TinyStoriesV2-GPT4-samples.npy")
+    #dataset = np.load(OUT_PATH / "TinyStoriesV2-GPT4-samples.npy")
+    dataset = np.load(OUT_PATH / "OpenWebText-train.npy")
     model = TransformerModel(vocab_size, d_model, context_length, rope_theta, num_heads, d_ff, num_layers).to(device)
     optimizer = AdamW(model.parameters(), lr=1e-3, weight_decay=0.01, betas=(0.9, 0.999), eps=1e-8)
     params = sum(p.numel() for p in model.parameters())
@@ -73,6 +73,8 @@ if __name__ == "__main__":
     print(f"num_layers: {num_layers}")
     print(f"num_heads: {num_heads}")
     print(f"rope_theta: {rope_theta}")
+    print(f"Sample dataset size: {len(dataset):,} tokens")
+    print(f"Params:  {params/1e6:.2f}M")
     #benchmark_cpu_training_step(dataset, model, optimizer)
     estimate_gpu_step_time(params, batch_size, context_length,
                        gpu_peak_tflops=8.9, mfu=0.35, total_steps=len(dataset) // batch_size)

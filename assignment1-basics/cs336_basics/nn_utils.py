@@ -157,7 +157,10 @@ def load_checkpoint(src, model, optimizer):
             model: torch.nn.Module
             optimizer: torch.optim.Optimizer
     """
-    checkpoint_state = torch.load(src)
+    current_device = next(model.parameters()).device
+    print(f" -> Mapping tensors to current host device: {current_device}")
+
+    checkpoint_state = torch.load(src, map_location=current_device)
     model.load_state_dict(checkpoint_state["model"])
     optimizer.load_state_dict(checkpoint_state["optimizer"])
     return checkpoint_state["iteration"]

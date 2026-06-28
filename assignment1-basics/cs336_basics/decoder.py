@@ -33,9 +33,9 @@ following steps:
 """
 from cs336_basics.optim import AdamW
 from cs336_basics.transformer import TransformerModel
-from tests.test_tokenizers import get_tokenizer_from_vocab_merges_path
-from cs336_basics.run import load_hyperparams, CHECKPOINT_PATH
-from cs336_basics.checkpoints import checkpoint_resume
+from cs336_basics.bpe_tokenizer import BPETokenizer
+from cs336_basics.checkpoints import checkpoint_resume,load_hyperparams
+from cs336_basics.checkpoints import CHECKPOINT_PATH
 from cs336_basics.paths import PROJECT_ROOT, DATA_PATH, OUT_PATH
 import os
 import math
@@ -46,22 +46,17 @@ import torch
 def get_bpe_params_for_dataset(tokenfile):
     # Get only the name
     tokens_topic = Path(tokenfile).stem
-    vocab_file = OUT_PATH / f"{tokenfile}_vocab.json"
-    merge_file = OUT_PATH / f"{tokenfile}_merges.txt"
+    #print("tokens_topic - ", tokens_topic)
+    vocab_file = OUT_PATH / f"{tokens_topic}_vocab.json"
+    merge_file = OUT_PATH / f"{tokens_topic}_merges.txt"
+    #print("vocab --", vocab_file, " merge -- ", merge_file)
     return vocab_file, merge_file
 
-def decoding(prompt_text, hp, vocab_path, merges_path, device=None):
-    if device is None:
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-        elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
-            device = torch.device("mps")
-        else:
-            device = torch.device("cpu")
 
+def reload_hyper_params():
     checkpt_params_path = os.path.join(CHECKPOINT_PATH,
                                        f"hyperparams.json")
-    hp, tokenfile = load_hyperparams(CHECKPOINT_PATH)
+    hp, tokenfile = load_hyperparams(checkpt_params_path)
     vocab_size = hp.vocab_size
     num_layers = hp.num_layers
     context_length = hp.context_length
@@ -70,6 +65,38 @@ def decoding(prompt_text, hp, vocab_path, merges_path, device=None):
     d_ff       = hp.d_ff
     d_model    = hp.d_model
     rope_theta = hp.rope_theta
+
+    print("\n")
+    print("Decoder with ")
+    print("  vocab size: ", vocab_size)
+    print("  context length: ", context_length)
+    print("  num heads:  ", num_heads)
+    print("  d_ff:       ", d_ff)
+    print("  d_model:    ", d_model)
+    print("  rope_theta: ", rope_theta)
+    print("  tokenfile:  ", tokenfile)
+    print("\n")
+    return hp, tokenfile
+
+def decoding(prompt_text, hp, vocab_path, merges_path, device=None):
+
+    vocab_size = hp.vocab_size
+    num_layers = hp.num_layers
+    context_length = hp.context_length
+    batch_size = hp.batch_size
+    num_heads  = hp.num_heads
+    d_ff       = hp.d_ff
+    d_model    = hp.d_model
+    rope_theta = hp.rope_theta
+
+
+    if device is None:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
 
     # initialized weights 0:
     model = TransformerModel(vocab_size, d_model,
@@ -80,10 +107,9 @@ def decoding(prompt_text, hp, vocab_path, merges_path, device=None):
                       weight_decay=0.01,
                       betas=(0.9, 0.999), eps=1e-8,)
 
-    chkpt = hp.checkpoint
-    checkpoint_resume(model, optimizer, chkpt)
+    checkpoint_resume(model, optimizer, hp.checkpoint)
 
-    tokenizer = get_tokenizer_from_vocab_merges_path(vocab_path, merges_path)
+    tokenizer = BPETokenizer.from_files(vocab_path, merge_path)
     encoded_tokens = tokenizer.encode(prompt_text)
 
     # ... your existing code ends here ...
@@ -118,11 +144,11 @@ def decoding(prompt_text, hp, vocab_path, merges_path, device=None):
          token_ids = torch.cat((token_ids, next_token), dim=1)
 
          # Optional: Stop early if the model generates an End-of-String (EOS) token ID
-         if next_token.item() == tokenizer.eos_token_id:
+         if next_token.item() == "|<endoftext>|":
             break
     # After the loop finishes, token_ids holds the full generated sequence
     # Convert token IDs back to readable text
-    full_text = tokenizer.decode(token_ids[0])
+    full_text = tokenizer.decode(token_ids[0].tolist())
     print(f"\n--- Generated Text ---\n{full_text}")
 
 def  prompt():
@@ -133,6 +159,6 @@ def  prompt():
 
 if __name__ == "__main__":
     prompt_text = prompt()
-    hp, tokenfile = load_hyperparams(CHECKPOINT_PATH)
+    hp, tokenfile = reload_hyper_params()
     vocab_path, merge_path = get_bpe_params_for_dataset(tokenfile)
     decoding(prompt_text, hp, vocab_path, merge_path)
