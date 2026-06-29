@@ -124,6 +124,7 @@ def training_together(dataset, validation_dataset,
 
     model.train() # Set model to training mode
     best_val = float("inf")
+    total_steps = presets.train.max_steps
     print(f"total steps: {total_steps}\nstarting step {global_step}")
 
     for step in range(global_step, total_steps):
@@ -294,7 +295,8 @@ def run_main():
     valid_mm = open_memmap_1d(token_valid_path, np_dtype = "uint16")
 
     model_dtype = torch_dtype_from_string("float32")
-    presets.train.max_steps = len(trainmm) // (batch_size)
+    #presets.train.max_steps = len(trainmm) // (batch_size)
+    print("Max possible steps", len(train_mm)//hyper_params.batch_size)
     presets.train.eval_interval = 100
     presets.train.log_interval == 200
 
