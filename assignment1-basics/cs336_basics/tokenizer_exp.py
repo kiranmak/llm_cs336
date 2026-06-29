@@ -66,6 +66,7 @@ def encode_file_parallel(txt_path: Path,
                          merge_path: Path,
                          special_tokens: list[str],
                          out_path: Path,
+                         skip_npy=True,
                          num_workers: int = None):
     current_dir = Path.cwd()
     src = txt_path.relative_to(current_dir)
@@ -98,13 +99,13 @@ def encode_file_parallel(txt_path: Path,
     pool.join()
 
     t_conv = time.time()
-    data = np.fromfile(temp_bin_path, dtype=np.uint16)
-    np.save(out_path, data)
+    if not skip_npy:
+        data = np.fromfile(temp_bin_path, dtype=np.uint16)
+        np.save(out_path, data)
+        os.remove(temp_bin_path)
 
-    os.remove(temp_bin_path)
     print(f"Total Tokens: {total_tokens}")
     print_time("Encoding", t_conv - t0)
-    print_time("Convert NPY", time.time() - t_conv)
 
 def main_file_encoder():
     print(f"====== Encoding text to NPY ======")
@@ -124,16 +125,21 @@ def main_file_encoder():
     print(f"====== Encoding to NPY Finished ======")
 
 
-def file_encoder(dataset_prefix: str, dataset_type: str = "samples"):
+def file_encode_bin_from_vocab_merges(dataset_prefix: str,
+                                  dataset_type: str = "samples"):
     roster = get_vocab_merge_fname(dataset_prefix, dataset_type)
     encode_file_parallel(
         txt_path   = roster["text"],
         vocab_path = roster["vocab"],
         merge_path = roster["merge"],
         special_tokens = ["<|endoftext|>"],
-        out_path   = roster["npy"]
+        out_path   = roster["npy"],
+        skip_npy=True,
     )
 
 
 if __name__ == "__main__":
-    main_file_encoder()
+    #main_file_encoder()
+    tokenfile = "TinyStoriesV2-GPT4"
+    print("Generating BIN file for the dataset...", tokenfile, "samples")
+    file_encode_bin_from_vocab_merges(tokenfile, "samples")
