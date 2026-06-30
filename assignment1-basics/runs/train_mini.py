@@ -33,7 +33,7 @@ def mini_training_proc():
                         max_steps= 1000, log_interval= 100,
                         eval_interval= 2000, eval_batches = 20)
     hyper_params.checkpoint.interval = 100
-    presets.train.max_steps = 500
+    presets.train.max_steps = 10
     presets.train.eval_interval = 100
     presets.train.log_interval == 200
 

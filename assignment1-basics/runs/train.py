@@ -125,7 +125,11 @@ def training_together(dataset, validation_dataset,
     model.train() # Set model to training mode
     best_val = float("inf")
     total_steps = presets.train.max_steps
+    starting_step = global_step
     print(f"total steps: {total_steps}\nstarting step {global_step}")
+    # Compile model for kernel fusion
+    model = torch.compile(model)
+    model.train()
 
     for step in range(global_step, total_steps):
         step_start = time.time()
@@ -138,8 +142,7 @@ def training_together(dataset, validation_dataset,
             tw = presets.optim.warmup_iters,
             tc = presets.optim.cosine_cycle_iters
         )
-        for group in optimizer.param_groups:
-           group["lr"] = lr
+        for group in optimizer.param_groups: group["lr"] = lr
 
         # 7.2 sample a batch from training data
         X, Y = get_batch(dataset,
@@ -183,9 +186,10 @@ def training_together(dataset, validation_dataset,
         if global_step % presets.train.log_interval == 0:
             elapsed = time.time() - start_time
             # step * B * T
-            tokens_processed = global_step * batch_size * context_length
+            tokens_processed = (global_step - starting_step) *\
+                                batch_size * context_length
             tok_s = tokens_processed/elapsed
-            msg = f"step={step+1} loss={loss.item():.4f} lr={lr:.3e}"
+            msg = f"[train] step={step+1} loss={loss.item():.4f} lr={lr:.3e}"
             msg += f" tok/s={tok_s:.1f}"
             print(msg)
 
@@ -211,7 +215,7 @@ def training_together(dataset, validation_dataset,
                                     context_length=context_length,
                                     device=device)
             val_ppl = float(math.exp(val_loss))
-            print(f"[eval] step={step+1} val_loss={val_loss:.4f} val_ppl={val_ppl:.2f}")
+            print(f"[ eval] step={step+1} val_loss={val_loss:.4f} val_ppl={val_ppl:.2f}")
             metrics={"val/loss": float(val_loss),
                      "val/ppl": float(val_ppl)}
             exp.log(step+1, metrics)
@@ -226,6 +230,8 @@ def training_together(dataset, validation_dataset,
 
     print(f"=== Final Checkpoint ===")
     checkpoint_sync(model, optimizer, global_step, chkpt)
+    params = sum(p.numel() for p in model.parameters())
+    print(f"Params:  {params/1e6:.2f}M")
     exp.close()
 
 

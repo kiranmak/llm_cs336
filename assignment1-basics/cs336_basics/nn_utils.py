@@ -16,7 +16,7 @@ def softmax_fn(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " 
 def silu_fn(x: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
   return x * torch.sigmoid(x)
 
-def cross_entropy_loss(logits, targets):
+def cross_entropy_loss_orig(logits, targets):
     """
     Deliverable: cross-entropy loss, which takes in predicted logits
     (logits) and targets (𝑥𝑖+1) and computes the cross-entrop
@@ -57,6 +57,40 @@ def cross_entropy_loss(logits, targets):
     #print(f"Perplexity:         {perplexity.item():.4f}")
 
     return loss.mean()
+
+def cross_entropy_loss(logits_flat, targets_flat, chunk_size=1000):
+    """
+    Memory-efficient custom cross entropy using chunked processing
+    to prevent MPS/CUDA Out-Of-Memory errors.
+    """
+    total_rows = logits_flat.size(0)
+    total_loss = 0.0
+
+    # Process the large tensor in smaller, manageable vertical slices
+    for i in range(0, total_rows, chunk_size):
+        end_idx = min(i + chunk_size, total_rows)
+
+        # Slice out a micro-chunk of logits and matching targets
+        logits_chunk = logits_flat[i:end_idx]
+        targets_chunk = targets_flat[i:end_idx]
+
+        # Safe Log-Sum-Exp trick applied ONLY to this chunk
+        max_val = torch.max(logits_chunk, dim=-1, keepdim=True)[0]
+        shifted_logits = logits_chunk - max_val
+
+        sum_exp = torch.sum(torch.exp(shifted_logits), dim=-1, keepdim=True)
+        log_softmax = shifted_logits - torch.log(sum_exp + 1e-9)
+
+        # Gather the log-probabilities of the true target tokens
+        target_log_probs = log_softmax.gather(dim=-1,
+                                  index=targets_chunk.unsqueeze(-1)).squeeze(-1)
+
+        # Accumulate the sum of losses for this chunk
+        total_loss += -torch.sum(target_log_probs)
+
+    # Return the average loss across the entire flattened batch
+    return total_loss / total_rows
+
 
 def learning_rate_schedule(t, lr_max, lr_min, tw, tc):
     """
