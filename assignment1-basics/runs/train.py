@@ -19,7 +19,7 @@ from cs336_basics.nn_utils import (
  )
 from cs336_basics.optim import AdamW
 from cs336_basics.transformer import TransformerModel
-from cs336_basics.paths import OUT_PATH, EXP_PATH, set_device
+from cs336_basics.paths import OUT_PATH, EXP_PATH, set_device, get_amptype
 from cs336_basics.tokenizer_exp import file_encode_bin_from_vocab_merges
 from cs336_basics.checkpoints import (
         checkpoint_resume,
@@ -129,6 +129,7 @@ def training_together(dataset, validation_dataset,
     print(f"total steps: {total_steps}\nstarting step {global_step}")
     # Compile model for kernel fusion
     model = torch.compile(model)
+    amp_dtype, device_type = get_amptype()
     model.train()
 
     for step in range(global_step, total_steps):
@@ -154,15 +155,13 @@ def training_together(dataset, validation_dataset,
 
         # 7.3. Forward pass: compute predicted logits from inputs
         # X shape: (B, S) -> Logits shape: (B, S, Vocab_Size)
-        logits = model(X)
+        with torch.amp.autocast(device_type=device_type, dtype=amp_dtype):
+            logits = model(X)
 
-        # Flatten tensors for CrossEntropyLoss evaluation
-        # CrossEntropy expects predictions: (N, V) and targets: (N)
-        # where N = B * S, and V = Vocab_Size, S seq len
-        logits_flat = logits.view(-1, vocab_size)
-        targets_flat = Y.view(-1)
-
-        loss =  cross_entropy_loss(logits_flat, targets_flat)
+            # Flatten
+            loss =  cross_entropy_loss(
+                        logits.view(-1, vocab_size),Y.view(-1)
+                    )
 
         # 7.4. Calculate parameter gradients - back propagation
         loss.backward()

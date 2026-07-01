@@ -1,7 +1,7 @@
 import os, time, torch, numpy as np
 from cs336_basics.optim import AdamW
 from cs336_basics.transformer import TransformerModel
-from cs336_basics.paths import OUT_PATH, set_device
+from cs336_basics.paths import OUT_PATH, set_device, get_amptype
 
 from cs336_basics.nn_utils import (
         get_batch,
@@ -93,6 +93,8 @@ def one_step_run(dataset, model, optimizer,
                  device, step, running_loss):
 
     step_start = time.time()
+    model = torch.compile(model)
+    model.train()
     lr = learning_rate_schedule(t=step, lr_max= 1e-3, lr_min= 1e-4,
         tw = 2000, tc = 106_667)
     for group in optimizer.param_groups:
@@ -107,19 +109,19 @@ def one_step_run(dataset, model, optimizer,
     # 2. Define a smaller micro-batch size that easily fits into your Mac's RAM
     micro_batch_size = 32
     total_loss_scalar = 0.0
+    amp_dtype, device_type = get_amptype()
     # 3. Process the batch in smaller slices
     for i in range(0, batch_size, micro_batch_size):
         X_micro = X_full[i : i + micro_batch_size]
         Y_micro = Y_full[i : i + micro_batch_size]
 
         # Forward pass on a tiny slice (32 x 256 x 10000) instead of the massive one
-        logits_micro = model(X_micro)
+        with torch.amp.autocast(device_type=device_type, dtype=amp_dtype):
+            logits_micro = model(X_micro)
 
-        logits_flat = logits_micro.view(-1, vocab_size)
-        targets_flat = Y_micro.view(-1)
-
-        # Calculate loss for this micro-step
-        loss_micro = cross_entropy_loss(logits_flat, targets_flat)
+            # Calculate loss for this micro-step
+            loss_micro = cross_entropy_loss(
+                           logits_micro.view(-1,vocab_size), Y_micro.view(-1))
 
         # Scale the loss relative to the chunk size so gradients average out perfectly
         scale_factor = micro_batch_size / batch_size

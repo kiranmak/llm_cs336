@@ -111,9 +111,10 @@ def checkpoint_resume(model, optimizer, chkpt):
         return 0
 
     latest_file = max(files, key=lambda x: x.stat().st_mtime)
+    print(f"\n[chkpt resume] ({latest_file})")
     global_step = load_checkpoint(latest_file, model, optimizer)
 
-    print(f"\n[chkpt resume] step {global_step} ({latest_file})")
+    print(f"\n[chkpt resume] step {global_step} ")
 
     # Manage rotating history to prevent storage exhaustion
     chkpt.saved_paths.append(str(latest_file))
