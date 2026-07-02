@@ -118,17 +118,19 @@ def one_step_run(dataset, model, optimizer,
         # Forward pass on a tiny slice (32 x 256 x 10000) instead of the massive one
         with torch.amp.autocast(device_type=device_type, dtype=amp_dtype):
             logits_micro = model(X_micro)
-
             # Calculate loss for this micro-step
             loss_micro = cross_entropy_loss(
-                           logits_micro.view(-1,vocab_size), Y_micro.view(-1))
+                       logits_micro.view(-1,vocab_size),
+                       Y_micro.view(-1))
 
-        # Scale the loss relative to the chunk size so gradients average out perfectly
-        scale_factor = micro_batch_size / batch_size
-        loss_scaled = loss_micro * scale_factor
+            # Scale the loss relative to the chunk size so gradients
+            # average out perfectly
+            scale_factor = micro_batch_size / batch_size
+            loss_scaled = loss_micro * scale_factor
 
-        # Backward pass accumulates gradients directly into model.parameters().grad
-        loss_scaled.backward()
+            # Backward pass accumulates gradients directly into
+            # model.parameters().grad
+            loss_scaled.backward()
 
         # Track the unscaled loss value for printing
         total_loss_scalar += loss_micro.item() * scale_factor

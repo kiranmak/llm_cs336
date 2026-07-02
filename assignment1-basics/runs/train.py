@@ -78,6 +78,15 @@ def estimate_loss(model: torch.nn.Module,
     model.train()
     return float(np.mean(losses))
 
+def conditional_compile(model, device):
+    """Compiles the model ONLY if running on CUDA to prevent Mac crashes."""
+    if device.type == "cuda":
+        print("CUDA detected: Compiling model graph...")
+        return torch.compile(model, **kwargs)
+    else:
+        print("MPS/CPU detected: Skipping compilation step (using Eager mode).")
+        return model
+
 
 def training_together(dataset, validation_dataset,
                       config_params, presets,
@@ -128,7 +137,7 @@ def training_together(dataset, validation_dataset,
     starting_step = global_step
     print(f"total steps: {total_steps}\nstarting step {global_step}")
     # Compile model for kernel fusion
-    model = torch.compile(model)
+    model = conditional_compile(model, device)
     amp_dtype, device_type = get_amptype()
     model.train()
 
@@ -155,6 +164,7 @@ def training_together(dataset, validation_dataset,
 
         # 7.3. Forward pass: compute predicted logits from inputs
         # X shape: (B, S) -> Logits shape: (B, S, Vocab_Size)
+        fp_start = time.time()
         with torch.amp.autocast(device_type=device_type, dtype=amp_dtype):
             logits = model(X)
 
@@ -165,6 +175,7 @@ def training_together(dataset, validation_dataset,
 
         # 7.4. Calculate parameter gradients - back propagation
         loss.backward()
+        fp_end = time.time()
 
         # 7.5 Gradient clipping for training stability
         if presets.optim.grad_clip > 0:
@@ -185,11 +196,12 @@ def training_together(dataset, validation_dataset,
         if global_step % presets.train.log_interval == 0:
             elapsed = time.time() - start_time
             # step * B * T
-            tokens_processed = (global_step - starting_step) *\
+            tokens_processed = (step - starting_step) *\
                                 batch_size * context_length
             tok_s = tokens_processed/elapsed
             msg = f"[train] step={step+1} loss={loss.item():.4f} lr={lr:.3e}"
             msg += f" tok/s={tok_s:.1f}"
+            msg += f" fp_tm={(fp_end-fp_start):.2f}"
             print(msg)
 
             # Pack metrics dictionary
@@ -208,13 +220,17 @@ def training_together(dataset, validation_dataset,
 
         # 7.8 Periodic evaluation on validation set
         if (step + 1) % presets.train.eval_interval == 0:
+            val_t = time.time()
             val_loss = estimate_loss(model, validation_dataset,
                                     eval_batches=presets.train.eval_batches,
                                     batch_size=batch_size,
                                     context_length=context_length,
                                     device=device)
             val_ppl = float(math.exp(val_loss))
-            print(f"[ eval] step={step+1} val_loss={val_loss:.4f} val_ppl={val_ppl:.2f}")
+            val_t = time.time() - val_t
+            print(f"[ eval] step={step+1} val_loss={val_loss:.4f}",
+                  f" val_ppl={val_ppl:.2f}",
+                  f" val_tm(s)={val_t:.2f}")
             metrics={"val/loss": float(val_loss),
                      "val/ppl": float(val_ppl)}
             exp.log(step+1, metrics)
@@ -251,6 +267,7 @@ def parse_user_params():
     args_parser.add_argument('--num_heads',  type=int, default=16)
     args_parser.add_argument('--resume', action='store_true', default=False)
     args_parser.add_argument('--tokenfile',  type=str, default=None)
+    args_parser.add_argument('--maxsteps',  type=int, default=5000)
 
     if len(sys.argv)==1:
         args_parser.print_help(sys.stderr)
@@ -266,12 +283,14 @@ def parse_user_params():
                                 args.num_heads, args.theta, args.resume)
     hyper_params.show()
     print("Training file: ", args.tokenfile)
-    return hyper_params, args.tokenfile
+    return hyper_params, args.tokenfile, args.maxsteps
 
 def run_main():
 
-    hyper_params, tokenfile = parse_user_params()
+    hyper_params, tokenfile, maxsteps = parse_user_params()
     presets = get_preset_cfg()
+    presets.train.max_steps = maxsteps
+    print("Training max steps: ", maxsteps)
 
     device = set_device(None)
     if device == "cpu":

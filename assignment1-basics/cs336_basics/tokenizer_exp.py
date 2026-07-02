@@ -20,8 +20,8 @@ def get_vocab_merge_fname(prefix, flagtype: str):
 
     f_roster = {}
     f_roster["text"]  = DATA_PATH / f"{prefix}-{flagtype}.txt"
-    f_roster["vocab"] = OUT_PATH / f"{prefix}-{flagtype}_vocab.json"
-    f_roster["merge"] = OUT_PATH / f"{prefix}-{flagtype}_merges.txt"
+    f_roster["vocab"] = OUT_PATH / f"{prefix}-train_vocab.json"
+    f_roster["merge"] = OUT_PATH / f"{prefix}-train_merges.txt"
     f_roster["npy"]   = OUT_PATH / f"{prefix}-{flagtype}.npy"
     #print("------ FILES to work with-----")
     for k,v in f_roster.items():
@@ -141,5 +141,6 @@ def file_encode_bin_from_vocab_merges(dataset_prefix: str,
 if __name__ == "__main__":
     #main_file_encoder()
     tokenfile = "TinyStoriesV2-GPT4"
-    print("Generating BIN file for the dataset...", tokenfile, "samples")
-    file_encode_bin_from_vocab_merges(tokenfile, "samples")
+    #tokenfile = "OpenWebText"
+    print("Generating BIN file for the dataset...", tokenfile, "train")
+    file_encode_bin_from_vocab_merges(tokenfile, "train")
