@@ -16,7 +16,7 @@ DATASET_TYPES = ["valid", "train", "samples"]
 def get_vocab_merge_fname(prefix, flagtype: str):
     if flagtype not in DATASET_TYPES:
         print(f"{flagtype} is Not ok input type of file")
-        exit(1)
+        #exit(1)
 
     f_roster = {}
     f_roster["text"]  = DATA_PATH / f"{prefix}-{flagtype}.txt"

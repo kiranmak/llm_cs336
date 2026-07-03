@@ -82,7 +82,7 @@ def conditional_compile(model, device):
     """Compiles the model ONLY if running on CUDA to prevent Mac crashes."""
     if device.type == "cuda":
         print("CUDA detected: Compiling model graph...")
-        return torch.compile(model, **kwargs)
+        return torch.compile(model)
     else:
         print("MPS/CPU detected: Skipping compilation step (using Eager mode).")
         return model
@@ -219,7 +219,7 @@ def training_together(dataset, validation_dataset,
 
 
         # 7.8 Periodic evaluation on validation set
-        if (step + 1) % presets.train.eval_interval == 0:
+        if validation_dataset and (step + 1) % presets.train.eval_interval == 0:
             val_t = time.time()
             val_loss = estimate_loss(model, validation_dataset,
                                     eval_batches=presets.train.eval_batches,
