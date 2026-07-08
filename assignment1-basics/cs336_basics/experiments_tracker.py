@@ -4,6 +4,7 @@ import time
 from dataclasses import asdict, is_dataclass
 from typing import Any
 from torch.utils.tensorboard import SummaryWriter
+from cs336_basics.paths import EXP_PATH
 
 class ExperimentTracker:
     """
@@ -16,29 +17,15 @@ class ExperimentTracker:
     - logs/<run_name>/config.json
     - TensorBoard event files in logs/<run_name>/
     """
-    def __init__(self, log_dir: str, service_name:str, config: Any, mode:str) -> None:
-        self.log_dir = log_dir
-
+    def __init__(self, service_name:str, mode:str) -> None:
+        self.log_dir = EXP_PATH
         self.mode = "decode" if mode is None else mode
         log_step_dir = self.get_next_log_filename(service_name, self.mode)
 
         self.metrics_path = os.path.join(log_step_dir, "metrics.jsonl")
-        self.config_path  = os.path.join(log_step_dir, "config.json")
         self.t0 = time.time()
         # Initialize TensorBoard SummaryWriter directly inside the run folder
         self.tb_writer = SummaryWriter(log_dir=self.log_dir)
-
-        # Write config once locally for reproducibility
-        if config is not None:
-            cfg_obj = self._to_jsonable(config)
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump(cfg_obj, f, indent=2, sort_keys=True)
-
-
-            # Save hyperparameter overview directly into TensorBoard's text tab
-            config_str = json.dumps(cfg_obj, indent=2)
-            self.tb_writer.add_text("hyperparameters",
-                            f"```json\n{config_str}\n```", global_step=0)
 
     def wall_time_s(self) -> float:
         return time.time() - self.t0

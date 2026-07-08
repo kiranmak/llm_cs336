@@ -109,41 +109,11 @@ def learning_rate_schedule(t, lr_max, lr_min, tw, tc):
         lr_t = lr_min
     return lr_t
 
-"""
-### GPT code. Just to understand. I dint write it. 
-def gradient_clipping(parameters: Iterable[torch.nn.Parameter],
-                      max_l2_norm: float) -> None:
-    params_with_grad = [p for p in parameters if p.grad is not None]
-    if not params_with_grad:
-        return
-
-    # Calculate the norm for each parameter's gradient
-    norms = [torch.norm(p.grad.detach()) for p in params_with_grad]
-
-    # Stack the individual norms into a tensor
-    # For MPS device, ensure tensor operations stay on MPS for efficiency
-    if torch.backends.mps.is_available():
-        stacked_norms = torch.stack(norms)
-        total_norm = torch.linalg.norm(stacked_norms)
-    else:
-        total_norm = torch.norm(torch.stack(norms))
-
-    # Calculate the clipping coefficient
-    clip_coef = max_l2_norm / (total_norm + 1e-6)
-    clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
-
-    # Apply the clipping coefficient to each parameter's gradient
-    # Ensure the coefficient is on the same device as the gradient
-    if torch.backends.mps.is_available():
-        for p in params_with_grad:
-            p.grad.detach().mul_(clip_coef_clamped)
-    else:
-        for p in params_with_grad:
-            p.grad.detach().mul_(clip_coef_clamped.to(p.grad.device))
-"""
-
 def gradient_clipping(parameters: Iterable[torch.nn.Parameter],
                       max_l2_norm: float) -> float:
+
+    if max_l2_norm <= 0: return
+
     params_with_grad = [p for p in parameters if p.grad is not None]
     if not params_with_grad:
         return 0.0

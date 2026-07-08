@@ -68,17 +68,16 @@ def encode_file_parallel(txt_path: Path,
                          out_path: Path,
                          skip_npy=True,
                          num_workers: int = None):
-    current_dir = Path.cwd()
-    src = txt_path.relative_to(current_dir)
-    dst = out_path.relative_to(current_dir)
-    print(f"Parallel Encode {src} -> {dst}.")
+    print(f"Parallel Encode {txt_path} -> {out_path}")
+    print("Input vocab and merge files used ",
+        f"{vocab_path} and {merge_path}")
     t0 = time.time()
 
     if num_workers is None:
         num_workers = max(1, multiprocessing.cpu_count() - 1)
     print(f"Using {num_workers} processes.")
 
-    temp_bin_path = out_path.with_suffix(".bin")
+    temp_bin_path = Path(out_path).with_suffix(".bin")
 
     pool = multiprocessing.Pool(
         processes   = num_workers,

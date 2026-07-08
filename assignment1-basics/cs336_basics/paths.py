@@ -1,12 +1,13 @@
-import pathlib
+from pathlib import Path
 import sys
 import torch
 
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
-DATA_PATH = PROJECT_ROOT / "data"
-OUT_PATH = PROJECT_ROOT / "out"
-CHECKPOINT_PATH = PROJECT_ROOT / "checkpoints"
-EXP_PATH = PROJECT_ROOT / "logs"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+REL_ROOT = PROJECT_ROOT.relative_to(Path.cwd())
+DATA_PATH = REL_ROOT / "data"
+OUT_PATH = REL_ROOT / "out"
+CHECKPOINT_PATH = REL_ROOT / "checkpoints"
+EXP_PATH = REL_ROOT / "logs"
 
 # Ensure the output directory exists
 OUT_PATH.mkdir(parents=True, exist_ok=True)
