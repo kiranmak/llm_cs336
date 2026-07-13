@@ -205,7 +205,6 @@ class RotaryPositionalEmbedding(nn.Module):
         """
         d_k = x.shape[-1]  # last dimension is d_k
         q = x[..., :d_k]
-        seq_len = x.shape[-2]  # second last dimension is seq_len
 
         def pat(t):
             leading_dims = len(t.shape) - 1  # all dims except last
@@ -213,11 +212,11 @@ class RotaryPositionalEmbedding(nn.Module):
             pattern = f'{leading_names} d i, j i -> {leading_names} d j'
             return pattern
 
-        # Slice buffers to current sequence length
-        cos = self.cos_cached[:seq_len, :]  # (seq_len, d_k // 2)
-        sin = self.sin_cached[:seq_len, :]  # (seq_len, d_k // 2)
+        # Index cached buffers using token_positions (handles non-zero offsets)
+        cos = self.cos_cached[token_positions, :]  # (..., seq_len, d_k // 2)
+        sin = self.sin_cached[token_positions, :]  # (..., seq_len, d_k // 2)
 
-        # Expand buffers to match the full vector dimension (seq_len, d_k)
+        # Expand buffers to match the full vector dimension (..., seq_len, d_k)
         cos_full = torch.repeat_interleave(cos, 2, dim=-1)
         sin_full = torch.repeat_interleave(sin, 2, dim=-1)
 

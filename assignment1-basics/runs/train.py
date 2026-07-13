@@ -29,21 +29,20 @@ from runs.train_helper import (
 from cs336_basics.configs import CheckPtConfig, TrainingConfig
 
 
-def print_msg(step, loss,tok_s, lr, fwd_pass_time):
-    msg = f"[train] step={step+1} loss={loss.item():.4f} lr={lr:.3e}"
-    msg += f" tok/s={tok_s:.1f}"
-    msg += f" fp_tm={(fwd_pass_time):.2f}"
+def print_msg(step, loss, tok_s, lr, ppl, avg_loss):
+    msg = f"[train] step={step+1} trn_loss={loss:.4f} ppl={ppl:.2f} lr={lr:.3e} avg_loss={avg_loss:.4f} tok/s={tok_s:.1f}"
     print(msg)
 
-def validation_step(cfg, best_val, step, exp, model, optimizer, device):
-    valid_mm = open_memmap_1d(cfg.valid_set, cfg.np_dtype)
+def validation_step(cfg, valid_mm, best_val, step, exp, model, optimizer, device, device_type, amp_dtype):
     val_t = time.time()
     val_loss = estimate_loss(model,
                             valid_mm,
                             cfg.eval_batches,
                             cfg.batch_size,
                             cfg.context_length,
-                            device)
+                            device,
+                            device_type=device_type,
+                            amp_dtype=amp_dtype)
 
     val_pplex = float(math.exp(val_loss))
     val_t = time.time() - val_t
@@ -104,7 +103,7 @@ def main_training_loop(cfg: TrainingConfig):
 
     # Setup runtime tracking variables
     start_time = time.time()
-    running_loss = 0.0
+    running_loss = []
     # param count
     params = sum(p.numel() for p in model.parameters())
     print(f"Params:              {params/1e6:.2f}M")
@@ -118,7 +117,9 @@ def main_training_loop(cfg: TrainingConfig):
     model.train() # Set model to training mode
     best_val      = float("inf")
     train_mm = open_memmap_1d(cfg.dataset, np_dtype = cfg.np_dtype)
-    print("Train Corpus size: ", len(train_mm))
+    valid_mm = open_memmap_1d(cfg.valid_set, cfg.np_dtype)
+    print("Train Corpus size: ", format(len(train_mm),
+                                      ","))
     # Compile model for kernel fusion
     model = conditional_compile(model, device)
     model.train()
@@ -127,7 +128,6 @@ def main_training_loop(cfg: TrainingConfig):
 
     for step in range(starting_step, cfg.max_steps):
         step_start = time.time()
-
         # 7.1 Update learning rate according to schedule
         lr = learning_rate_schedule(
             step,
@@ -144,19 +144,36 @@ def main_training_loop(cfg: TrainingConfig):
                          cfg.context_length,
                          device)
 
+        if step == starting_step:
+            print("--- DIAGNOSTIC DATA CHECK ---")
+            print("X first 5 tokens:", X[0, :5].tolist())
+            print("Y first 5 tokens:", Y[0, :5].tolist())
+            print("-----------------------------")
+
         optimizer.zero_grad(set_to_none=True)
 
         # 7.3. Forward pass: compute predicted logits from inputs
-        fp_start = time.time()
+        
         with torch.amp.autocast(device_type, amp_dtype):
             # penalize predictions that are wrong
             logits = model(X)
             Xf, Yf = logits.view(-1, cfg.vocab_size), Y.view(-1)
             loss =  cross_entropy_loss(Xf, Yf)
+        if torch.isnan(loss) or torch.isinf(loss):
+            print(f"  [WARN] step={step}: NaN/Inf loss detected, skipping step")
+            optimizer.zero_grad()
+            continue
 
         # 7.4. Calculate parameter gradients - back propagation
         loss.backward()
-        fp_end = time.time()
+
+        # DIAGNOSTIC: Ensure gradients are non-zero (must be after backward)
+        if step == starting_step:
+            grads = [p.grad.abs().mean().item() for p in model.parameters() if p.grad is not None]
+            n_params_with_grad = sum(p.numel() for p in model.parameters() if p.grad is not None)
+            print(f"  Params w/ gradients: {n_params_with_grad:,}")
+            print(f"  Mean |grad|:         {sum(grads)/len(grads):.6f}  (healthy: ~0.001–0.1)")
+            print(f"  grad_norm computed by clipping will be logged each step")
 
         # 7.5 Gradient clipping for training stability
         grad_norm = gradient_clipping(model.parameters(), cfg.grad_clip)
@@ -164,25 +181,28 @@ def main_training_loop(cfg: TrainingConfig):
         # 7.6. Optimization step: update weights using AdamW equations
         optimizer.step()
 
-        running_loss += loss.item()
+        # Track loss
+        running_loss.append(loss.item())
 
         if (step + 1) % chkpt.interval == 0:
-            checkpoint_sync(model, optimizer, step, chkpt)
+            checkpoint_sync(model, optimizer, step+1, chkpt)
 
         # 7.7 Periodic logging
         if (step+1) % cfg.log_interval == 0:
             elapsed = time.time() - start_time
+            avg_loss = np.mean(running_loss[-100:]) if len(running_loss) >= 100 else np.mean(running_loss)
+            perplexity = np.exp(avg_loss)
+            
             # step * B * T
             tok_s = ((step - starting_step) *\
                        cfg.batch_size * cfg.context_length)/ elapsed
 
-            print_msg(step, loss, tok_s, lr, fp_end - fp_start)
+            print_msg(step, loss, tok_s, lr, perplexity, avg_loss)
 
             # Pack metrics dictionary
             metrics = {
-                "train/loss_avg": running_loss / cfg.log_interval,
-                "train/perplexity": torch.exp(torch.tensor(
-                          running_loss / cfg.log_interval)).item(),
+                "train/loss_avg": avg_loss,
+                "train/perplexity": perplexity,
                 "train/grad_norm": grad_norm,
                 "train/curr_step": step,
                 "perf/hours": elapsed / 3600.0,
@@ -191,12 +211,30 @@ def main_training_loop(cfg: TrainingConfig):
             }
             exp.log(step+1, metrics)
 
-
         # 7.8 Periodic evaluation on validation set
         if cfg.valid_set and (step + 1) % cfg.eval_interval == 0:
-            best_val, model, optimizer = validation_step(cfg, best_val, step, exp, model, optimizer, device)
-            # Reset accumulation buffer
-            running_loss = 0.0
+            avg_val_loss = estimate_loss(model,
+                                    valid_mm,
+                                    cfg.eval_batches,
+                                    cfg.batch_size,
+                                    cfg.context_length,
+                                    device_type,
+                                    amp_dtype,
+                                    device)
+
+            val_perplexity = np.exp(avg_val_loss)
+            print(f"[ eval] step={step+1} val_loss={avg_val_loss:.4f}",
+                f" val_perplexity={val_perplexity:.2f}")
+
+            metrics={"val/loss": float(avg_val_loss),
+                    "val/ppl": float(val_perplexity)}
+            exp.log(step+1, metrics)
+
+            # Save the best-performing checkpoint
+            if avg_val_loss < best_val:
+                best_val = avg_val_loss
+                save_checkpoint(model, optimizer, step+1, cfg.best_chkpt_file)
+
 
     print(f"Final Checkpoint Done")
     checkpoint_sync(model, optimizer, cfg.max_steps, chkpt)

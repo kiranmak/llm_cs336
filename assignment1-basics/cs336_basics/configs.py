@@ -73,6 +73,9 @@ class TrainingConfig:
         with open(fname, "r") as f:
             data = json.load(f)
         return cls(**data)  # Unpacks dictionary keys as keyword arguments
+    def print(self):
+        for key, value in asdict(self).items():
+            print(f"{key}: {value}")
 
 
 if __name__ == "__main__":

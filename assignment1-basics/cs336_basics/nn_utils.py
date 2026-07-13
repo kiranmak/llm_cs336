@@ -154,15 +154,13 @@ def get_batch(dataset: npt.NDArray, batch_size: int,
     if context_length <= 0:
         raise ValueError(f"context_length must be positive, got {context_length}")
 
-
     potential_start_indices = len(dataset) - context_length
     start_indices = np.random.randint(0, potential_start_indices, size=batch_size)
+    grid_indices = start_indices[:, None] + np.arange(context_length+1)
+    chunks = dataset[grid_indices]
 
-    indices = start_indices[:, None] + np.arange(context_length)
-
-    X = torch.as_tensor(dataset[indices], dtype=torch.int64, device=device)
-    Y = torch.as_tensor(dataset[indices + 1], dtype=torch.int64, device=device)
-
+    X = torch.from_numpy(chunks[:, :-1]).clone().to(device, dtype=torch.long)
+    Y = torch.from_numpy(chunks[:, 1:]).clone().to(device, dtype=torch.long)
     return X, Y
 
 

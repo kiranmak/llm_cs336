@@ -27,6 +27,8 @@ def open_memmap_1d(token_npy_path: str, np_dtype: str) -> np.memmap:
     """
     Open a 1D token memmap file. The file is npy
     """
+    if not token_npy_path:
+        return None
     dtype = np.dtype(np_dtype)
     itemsize = dtype.itemsize
     nbytes = os.path.getsize(token_npy_path)
@@ -42,6 +44,8 @@ def estimate_loss(model: torch.nn.Module,
                   eval_batches,
                   batch_size,
                   context_length,
+                  device_type: str,
+                  amp_dtype: torch.dtype,
                   device) -> float:
     model.eval()
     losses = []
@@ -52,11 +56,12 @@ def estimate_loss(model: torch.nn.Module,
                    context_length,
                    device)
 
-        logits = model(X)  # (B, S, V)
-        B, S, V = logits.shape
-        loss = cross_entropy_loss(
-                logits.reshape(B * S, V),
-                Y.reshape(B * S))
+        with torch.amp.autocast(device_type, dtype=amp_dtype):
+            logits = model(X)  # (B, S, V)
+            B, S, V = logits.shape
+            loss = cross_entropy_loss(
+                    logits.reshape(B * S, V),
+                    Y.reshape(B * S))
         losses.append(float(loss.item()))
     model.train()
     return float(np.mean(losses))
@@ -87,8 +92,11 @@ def parse_user_params():
     args_parser.add_argument('--num_layers', type=int, default=4)
     args_parser.add_argument('--num_heads',  type=int, default=16)
     args_parser.add_argument('--resume', action='store_true', default=False)
+    args_parser.add_argument('--loginterval', type=int, default=200)
+    args_parser.add_argument('--evalinterval', type=int, default=200)
     args_parser.add_argument('--tokenfile',  type=str, default=None)
     args_parser.add_argument('--maxsteps',  type=int, default=5000)
+    args_parser.add_argument('--warmup',  type=float, default=0.05)
 
     if len(sys.argv)==1:
         args_parser.print_help(sys.stderr)
@@ -113,8 +121,6 @@ def parse_user_params():
         batch_size=args.batch_size,
         max_steps = args.maxsteps,
         context_length= args.contextlen,
-        eval_interval = 100,
-        log_interval = 50,
         resume = args.resume,
         vocab_size = args.vocab_size,
         d_model = args.d_model,
@@ -122,6 +128,10 @@ def parse_user_params():
         num_layers = args.num_layers,
         num_heads = args.num_heads,
         rope_theta = args.theta,
+        log_interval = args.loginterval,
+        eval_interval = args.evalinterval,
+        warmup_iters = int(args.maxsteps * args.warmup),
+        cosine_cycle_iters = int(args.maxsteps * (1 - args.warmup)),
     )
 
     return config
