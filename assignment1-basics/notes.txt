@@ -16,3 +16,78 @@ the preceding and following texts are unrelated.
     4. We get byte codes for  each word and count. This is calledour corpus (or pre_tokens).
 
 BPE_tokenization
+
+
+===== DECODING and using GPU =====
+Your parameter math is 100% correct.
+The difference comes down to whether your model uses weight tying (sharing the exact same weight matrix between the input token embeddings and the final output language modeling head). [1, 2] 
+## The Math Behind Your 45.22M Parameters
+With a vocabulary size of 32,000, the structural breakdown of your model is exactly 45.22 million parameters because your setup implements untied weights (two separate matrices for input and output).
+Here is how your specific parameters are allocated:
+
+* Embeddings & LM Head (Untied): $2 \times (32,000 \times 512) = \mathbf{32.77\text{M}}$ params.
+* Attention Blocks (4 Layers): $4 \times (4 \times 512 \times 512) = \mathbf{4.19\text{M}}$ params (for $W_q, W_k, W_v, W_o$).
+* SwiGLU FFN Blocks (4 Layers): $4 \times (3 \times 512 \times 1344) = \mathbf{8.26\text{M}}$ params (for $W_{\text{gate}}, W_{\text{up}}, W_{\text{down}}$).
+* Layer/RMS Normalizations: Negligible small bias/gain vectors (~0.01M params).
+* Total: 45.22M parameters. [3] 
+
+## Where the "25M" Estimate Came From
+The rough "25M-28M" parameter estimate common in historical configurations relies on weight tying ($1 \times 32,000 \times 512 = 16.38\text{M}$ instead of 32.77M).
+Because your vocabulary matrix accounts for a massive 72.5% of your entire model's parameter budget, keeping the embeddings untied pushes you straight to 45M. Both approaches are entirely valid for CS336.
+------------------------------
+## Critical Bottleneck: Your Dataset Size
+Looking at your configuration, your sample dataset size is 2,646,945,909 tokens (approx. 2.65 billion tokens).
+Given a sequence length of 256 and a batch size of 256, your training loop processes 65,536 tokens per step. This presents a massive training budget discrepancy:
+
+* 5,000 baseline steps will only consume 327.68 million tokens.
+* To pass through your entire 2.65B token corpus exactly once (1 epoch), you would need to run your training loop for 40,389 steps.
+
+## Revised A100 / RTX 4090 Compute Estimates
+
+* For a 5,000-step baseline run: Your 45M parameter model will finish in roughly 20–30 minutes on a single A100.
+* For a full 1-epoch run (40,000+ steps): Your model will need roughly 3 to 4 hours of continuous GPU runtime to process all 2.65 billion tokens.
+
+Are you planning to train for the fixed 5,000 steps specified on the standard assignment benchmark, or do you intend to run the training loop for a full epoch across all 2.65 billion tokens to squeeze out the lowest possible validation perplexity?
+
+def count_parameters(vocab_size=32000, d_model=512, d_ff=1344, num_layers=4, num_heads=16):
+    # Embedding Layer
+    # Input embedding: vocab_size * d_model
+    # Output projection/LM head shares weight or is separate? Usually distinct unless tied.
+    # Let's check untied head first
+    embeddings = vocab_size * d_model
+    lm_head = vocab_size * d_model
+    
+    # Per layer components
+    # RMSNorm / LayerNorm: 
+    # Usually 1 for attn input, 1 for ffn input, 1 for final layer output. 
+    # Let's count standard transformer layer:
+    # Q, K, V projections: d_model * d_model * 3
+    # O projection: d_model * d_model
+    # SwiGLU FFN: 
+    # Standard SwiGLU has W_gate (d_model * d_ff), W_up (d_model * d_ff), W_down (d_ff * d_model)
+    # Total FFN params = 3 * d_model * d_ff
+    
+    # Normalizations per layer: 2 * d_model (if RMSNorm)
+    
+    attn_params = (d_model * d_model * 3) + (d_model * d_model)
+    ffn_params = 3 * d_model * d_ff
+    norms_per_layer = 2 * d_model
+    
+    layer_params = attn_params + ffn_params + norms_per_layer
+    
+    # Final norm
+    final_norm = d_model
+    
+    total = embeddings + lm_head + (num_layers * layer_params) + final_norm
+    return total
+
+print(f"Untied head total: {count_parameters() / 1e6:.2f}M")
+print(f"Tied head total: {(count_parameters() - 32000*512) / 1e6:.2f}M")
+
+### RUN
+ uv run runs/traincmd.py --tokenfile TinyStoriesV2-GPT4 --maxsteps 200 --batch_size 64 --contextlen 128 --evalinterval 50 --loginterval 50 --warmup 0.1
+
+[1] [https://todatabeyond.substack.com](https://todatabeyond.substack.com/p/build-a-small-language-model-slm)
+[2] [https://arxiv.org](https://arxiv.org/html/2605.17398v1)
+[3] [https://huggingface.co](https://huggingface.co/xai-org/grok-2/discussions/24)
+
