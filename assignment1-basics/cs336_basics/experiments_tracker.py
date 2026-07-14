@@ -25,7 +25,7 @@ class ExperimentTracker:
         self.metrics_path = os.path.join(log_step_dir, "metrics.jsonl")
         self.t0 = time.time()
         # Initialize TensorBoard SummaryWriter directly inside the run folder
-        self.tb_writer = SummaryWriter(log_dir=self.log_dir)
+        self.tb_writer = SummaryWriter(log_dir=log_step_dir)
 
     def wall_time_s(self) -> float:
         return time.time() - self.t0

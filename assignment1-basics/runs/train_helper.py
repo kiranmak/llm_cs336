@@ -97,6 +97,8 @@ def parse_user_params():
     args_parser.add_argument('--tokenfile',  type=str, default=None)
     args_parser.add_argument('--maxsteps',  type=int, default=5000)
     args_parser.add_argument('--warmup',  type=float, default=0.05)
+    args_parser.add_argument('--cosine',  type=float, default=1.0)
+    args_parser.add_argument('--lr',  type=float, default=3e-4)
 
     if len(sys.argv)==1:
         args_parser.print_help(sys.stderr)
@@ -131,7 +133,8 @@ def parse_user_params():
         log_interval = args.loginterval,
         eval_interval = args.evalinterval,
         warmup_iters = int(args.maxsteps * args.warmup),
-        cosine_cycle_iters = int(args.maxsteps * (1 - args.warmup)),
+        cosine_cycle_iters = int(args.maxsteps * args.cosine),
+        lr_max = args.lr,
     )
 
     return config

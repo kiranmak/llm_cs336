@@ -21,6 +21,8 @@ dependencies = [
     "ruff>=0.15.8",
     "matplotlib",
     "tensorboard",
+    "tbparse>=0.0.9",
+    "seaborn>=0.13.2",
 ]
 
 [build-system]

@@ -33,16 +33,16 @@ def print_msg(step, loss, tok_s, lr, ppl, avg_loss):
     msg = f"[train] step={step+1} trn_loss={loss:.4f} ppl={ppl:.2f} lr={lr:.3e} avg_loss={avg_loss:.4f} tok/s={tok_s:.1f}"
     print(msg)
 
-def validation_step(cfg, valid_mm, best_val, step, exp, model, optimizer, device, device_type, amp_dtype):
+def validation_step(cfg, valid_mm, best_val, step, exp, model, optimizer, device_type, amp_dtype, device):
     val_t = time.time()
     val_loss = estimate_loss(model,
-                            valid_mm,
-                            cfg.eval_batches,
-                            cfg.batch_size,
-                            cfg.context_length,
-                            device,
-                            device_type=device_type,
-                            amp_dtype=amp_dtype)
+                  data=valid_mm,
+                  eval_batches=cfg.eval_batches,
+                  batch_size=cfg.batch_size,
+                  context_length=cfg.context_length,
+                  device_type=device_type,
+                  amp_dtype=amp_dtype,
+                  device=device)
 
     val_pplex = float(math.exp(val_loss))
     val_t = time.time() - val_t
@@ -81,7 +81,7 @@ def main_training_loop(cfg: TrainingConfig):
 
     os.makedirs(cfg.chkpt_dir, exist_ok=True)
 
-    sname = str(Path(cfg.input_src_file).stem)
+    sname = str(Path(cfg.input_src_file).stem) + "_" + str(cfg.lr_max)
     exp = ExperimentTracker(sname, mode="train")
 
     # initialized weights 0:
