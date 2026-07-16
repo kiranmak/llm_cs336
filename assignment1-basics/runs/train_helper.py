@@ -80,7 +80,7 @@ def conditional_compile(model, device):
 def parse_user_params():
 
     args_parser = argparse.ArgumentParser()
-    args_parser.add_argument('--debug', action='store_true', default=False)
+    args_parser.add_argument('--name', type=str, default="train_00")
     args_parser.add_argument("--device", type=str, default="gpu")
 
     args_parser.add_argument('--vocab_size', type=int, default=10000)
@@ -122,6 +122,7 @@ def parse_user_params():
         merge_file = str(OUT_PATH /(args.tokenfile+"-train_merges.txt")),
         dataset = str(OUT_PATH /(args.tokenfile+"-train.bin")),
         valid_set = str(OUT_PATH /(args.tokenfile+"-valid.bin")),
+        exp_name = args.name,
         batch_size=args.batch_size,
         max_steps = args.maxsteps,
         context_length= args.contextlen,
@@ -137,6 +138,7 @@ def parse_user_params():
         warmup_iters = int(args.maxsteps * args.warmup),
         cosine_cycle_iters = int(args.maxsteps * args.cosine),
         lr_max = args.lr,
+        lr_min = args.lr * 0.1,
     )
 
     return config

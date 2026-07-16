@@ -6,7 +6,7 @@ from cs336_basics.paths import CHECKPOINT_PATH, DATA_PATH, OUT_PATH
 
 class CheckPtConfig:
     # Other chackpointing Configuration
-    def __init__(self):
+    def __init__(self, name):
         self.dir = CHECKPOINT_PATH
         os.makedirs(self.dir, exist_ok=True)
         self.interval = 5000 # Save every 5,000 steps
@@ -22,6 +22,7 @@ class TrainingConfig:
     merge_file: str
     dataset: str
     valid_set: str
+    exp_name: str = None
 
     # Model architecture
     vocab_size: int = 10_000

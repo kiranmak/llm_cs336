@@ -30,7 +30,7 @@ from cs336_basics.configs import CheckPtConfig, TrainingConfig
 
 
 def print_msg(step, loss, tok_s, lr, ppl, avg_loss):
-    msg = f"[train] step={step+1} trn_loss={loss:.4f} ppl={ppl:.2f} lr={lr:.3e} avg_loss={avg_loss:.4f} tok/s={tok_s:.1f}"
+    msg = f"[train] step={step+1} loss={loss:.4f} ppl={ppl:.2f} lr={lr:.6e} avgloss={avg_loss:.4f} tok/s={tok_s:.1f}"
     print(msg)
 
 def validation_step(cfg, valid_mm, best_val, step, exp, model, optimizer, device_type, amp_dtype, device):
@@ -64,13 +64,12 @@ def validation_step(cfg, valid_mm, best_val, step, exp, model, optimizer, device
 
 def main_training_loop(cfg: TrainingConfig):
 
-    print("Training max steps: ", cfg.max_steps)
 
-    torch.manual_seed(0)
-    np.random.seed(0)
+    torch.manual_seed(73)
+    np.random.seed(73)
 
     print(78 * "=")
-    print("Starting Training...")
+    print("Training name " + cfg.exp_name + " max steps: " + str(cfg.max_steps))
     print(78 * "=")
     start = time.time()
 
@@ -81,9 +80,7 @@ def main_training_loop(cfg: TrainingConfig):
 
     os.makedirs(cfg.chkpt_dir, exist_ok=True)
 
-    sname = str(Path(cfg.input_src_file).stem)
-    mode =  "batch_size=" + str(cfg.batch_size)
-    exp = ExperimentTracker(sname, mode=mode)
+    exp = ExperimentTracker(cfg.exp_name, mode="train")
 
     # initialized weights 0:
     model = TransformerModel(cfg.vocab_size,
@@ -109,7 +106,7 @@ def main_training_loop(cfg: TrainingConfig):
     params = sum(p.numel() for p in model.parameters())
     print(f"Params:              {params/1e6:.2f}M")
 
-    chkpt = CheckPtConfig()
+    chkpt = CheckPtConfig(cfg.exp_name)
     chkpt.interval = cfg.chkpt_interval
     starting_step = 0
     if cfg.resume:
@@ -174,7 +171,6 @@ def main_training_loop(cfg: TrainingConfig):
             n_params_with_grad = sum(p.numel() for p in model.parameters() if p.grad is not None)
             print(f"  Params w/ gradients: {n_params_with_grad:,}")
             print(f"  Mean |grad|:         {sum(grads)/len(grads):.6f}  (healthy: ~0.001–0.1)")
-            print(f"  grad_norm computed by clipping will be logged each step")
 
         # 7.5 Gradient clipping for training stability
         grad_norm = gradient_clipping(model.parameters(), cfg.grad_clip)
