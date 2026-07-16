@@ -107,11 +107,13 @@ def parse_user_params():
     if args.tokenfile == None:
         print("Token file is needed, please provide the token file.")
         sys.exit(1)
+    """
     print(f"Using Training file: {args.tokenfile}")
     print(f"      vocab file: {OUT_PATH /args.tokenfile}-train_vocab.json")
     print(f"      merge file: {OUT_PATH /args.tokenfile}-train_merges.txt")
     print(f"      token file: {OUT_PATH /args.tokenfile}-train.bin    ")
     print(f"      validation file: {OUT_PATH /args.tokenfile}-valid.bin    ")
+    """
 
     # Initialize your config (overriding only what you need)
     config = TrainingConfig(

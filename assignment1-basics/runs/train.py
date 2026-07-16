@@ -81,8 +81,9 @@ def main_training_loop(cfg: TrainingConfig):
 
     os.makedirs(cfg.chkpt_dir, exist_ok=True)
 
-    sname = str(Path(cfg.input_src_file).stem) + "_" + str(cfg.lr_max)
-    exp = ExperimentTracker(sname, mode="train")
+    sname = str(Path(cfg.input_src_file).stem)
+    mode =  "batch_size=" + str(cfg.batch_size)
+    exp = ExperimentTracker(sname, mode=mode)
 
     # initialized weights 0:
     model = TransformerModel(cfg.vocab_size,
