@@ -1,7 +1,6 @@
 import os
 import json
-from typing import Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from cs336_basics.paths import CHECKPOINT_PATH, DATA_PATH, OUT_PATH
 
 class CheckPtConfig:
@@ -22,7 +21,7 @@ class TrainingConfig:
     merge_file: str
     dataset: str
     valid_set: str
-    exp_name: str = None
+    exp_name: str 
 
     # Model architecture
     vocab_size: int = 10_000
@@ -44,7 +43,7 @@ class TrainingConfig:
     weight_decay: float = 0.1
     grad_clip: float = 1.0
     warmup_iters: int = 2000
-    cosine_cycle_iters: int = 106_667
+    cosine_cycle_iters: int = 1000
 
     # Runtime args
     resume: bool = False
@@ -54,12 +53,18 @@ class TrainingConfig:
     np_dtype: str = "uint16"
     model_dtype: str = "float32"
 
-    # checkpoint args
-    chkpt_dir = str(CHECKPOINT_PATH) + "/" + str(exp_name)
+    # checkpoint args (computed after init)
+    chkpt_dir: str = field(init=False)
     chkpt_interval: int = 1000
     chkpt_maxkeep: int = 3
-    chkpt_saved_paths = []
-    best_chkpt_file :str = "/".join([chkpt_dir, "best_validation.pt"])
+    chkpt_saved_paths: list = field(default_factory=list)
+    best_chkpt_file: str = field(init=False)
+
+    def __post_init__(self):
+        self.chkpt_dir = str(CHECKPOINT_PATH / self.exp_name)
+        os.makedirs(self.chkpt_dir, exist_ok=True)
+        self.best_chkpt_file = self.chkpt_dir + "/best_validation.pt"
+        self.cosine_cycle_iters = self.max_steps
 
     def save(self, file_path: str):
         """Saves config parameters to a JSON file."""
@@ -68,15 +73,23 @@ class TrainingConfig:
             json.dump(asdict(self), f, indent=4)
 
     @classmethod
-    def load(cls, file_path: str):
+    def load(cls, file_path: str, exp_name: str):
         """Loads a JSON file and initializes the Dataclass."""
-        fname = "/".join([cls.chkpt_dir, file_path])
+        chkpt_dir = str(CHECKPOINT_PATH / exp_name)
+        fname = chkpt_dir + "/" + file_path
         with open(fname, "r") as f:
             data = json.load(f)
+        # Remove fields computed by __post_init__ — they are not __init__ args
+        for key in ("chkpt_dir", "best_chkpt_file", "chkpt_saved_paths"):
+            data.pop(key, None)
         return cls(**data)  # Unpacks dictionary keys as keyword arguments
     def print(self):
-        for key, value in asdict(self).items():
-            print(f"{key}: {value}")
+        data_dict = asdict(self)
+        items = list(data_dict.items())
+        for i in range(0, len(items), 4):
+            chunk = items[i:i+4]
+            line = " | ".join([f"{key}: {value}" for key, value in chunk])
+            print(line)
 
 
 if __name__ == "__main__":
@@ -87,7 +100,8 @@ if __name__ == "__main__":
         merge_file = str(OUT_PATH /"TinyStoriesV2-GPT4-train_merges.txt"),
         dataset = str(OUT_PATH   / "TinyStoriesV2-GPT4-exper.bin"),
         valid_set = None,
-        batch_size=128,  # custom override
+        exp_name = "run_001",
+        batch_size=32,  # custom override
         max_steps = 200,
         context_length= 32,
         eval_interval = 100,
@@ -95,5 +109,5 @@ if __name__ == "__main__":
         resume = False,
     )
     cfg.save("hyperparams.json")
-    loaded_cfg = TrainingConfig.load("hyperparams.json")
-    print(loaded_cfg)
+    loaded_cfg = TrainingConfig.load("hyperparams.json", exp_name="run_001")
+    loaded_cfg.print()

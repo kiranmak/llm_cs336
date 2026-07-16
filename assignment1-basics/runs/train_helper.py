@@ -1,11 +1,12 @@
-from cs336_basics.paths import DATA_PATH
-from cs336_basics.paths import OUT_PATH
 import argparse
 import sys
 import os
 import torch
 import numpy as np
 from cs336_basics.configs import TrainingConfig
+from cs336_basics.paths import set_device,  get_amptype, DATA_PATH, OUT_PATH
+from cs336_basics.optim import AdamW
+from cs336_basics.transformer import TransformerModel
 
 from cs336_basics.nn_utils import (
         get_batch,
@@ -72,9 +73,43 @@ def conditional_compile(model, device):
     if device.type == "cuda":
         print("CUDA detected: Compiling model graph...")
         return torch.compile(model)
+    if device.type == "mps":
+        print("MPS detected: using AOT eager mode for graph compilation.")
+        model = model.to(device)
+        return torch.compile(model, backend="aot_eager")
     else:
-        print("MPS/CPU detected: Skip compile (using Eager mode).")
-        return model
+        print("CPU detected: using eager mode.")
+    return model
+
+def training_initializer(cfg: TrainingConfig):
+
+    torch.manual_seed(68)
+    np.random.seed(68)
+
+    # harware initial setup
+    device = set_device(None)
+    amp_dtype, device_type = get_amptype()
+    model_dtype = torch_dtype_from_string(cfg.model_dtype)
+
+    # initialized weights 0:
+    model = TransformerModel(cfg.vocab_size,
+                            cfg.d_model,
+                            cfg.context_length,
+                            cfg.rope_theta,
+                            cfg.num_heads,
+                            cfg.d_ff,
+                            cfg.num_layers,
+                            device,
+                            dtype=model_dtype).to(device)
+
+    optimizer = AdamW(model.parameters(),
+                      cfg.lr_max,
+                      cfg.weight_decay,
+                      (cfg.beta1,cfg.beta2),
+                      cfg.eps)
+
+    criterion =  cross_entropy_loss
+    return model, optimizer, criterion, device
 
 
 def parse_user_params():
