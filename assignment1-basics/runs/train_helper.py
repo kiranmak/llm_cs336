@@ -81,8 +81,6 @@ def parse_user_params():
 
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument('--name', type=str, default="train_00")
-    args_parser.add_argument("--device", type=str, default="gpu")
-
     args_parser.add_argument('--vocab_size', type=int, default=10000)
     args_parser.add_argument('--batch_size', type=int, default=16)
     args_parser.add_argument('--contextlen', type=int, default=256)
@@ -115,6 +113,7 @@ def parse_user_params():
     print(f"      validation file: {OUT_PATH /args.tokenfile}-valid.bin    ")
     """
 
+    print("------args.name", args.name)
     # Initialize your config (overriding only what you need)
     config = TrainingConfig(
         input_src_file = str(DATA_PATH /(args.tokenfile+"-train.bin")),
@@ -141,5 +140,6 @@ def parse_user_params():
         lr_min = args.lr * 0.1,
     )
 
+    print("------config.exp_name", config.exp_name)
     return config
 

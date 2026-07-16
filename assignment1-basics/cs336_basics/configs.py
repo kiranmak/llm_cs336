@@ -7,12 +7,12 @@ from cs336_basics.paths import CHECKPOINT_PATH, DATA_PATH, OUT_PATH
 class CheckPtConfig:
     # Other chackpointing Configuration
     def __init__(self, name):
-        self.dir = CHECKPOINT_PATH
+        self.dir = CHECKPOINT_PATH / name
         os.makedirs(self.dir, exist_ok=True)
         self.interval = 5000 # Save every 5,000 steps
         self.max_keep = 3    # Keep only the 3 most recent full states
         self.saved_paths = []
-        self.best_chkpt_path = os.path.join(self.dir, "best_validation.pt")
+        self.best_chkpt_path = self.dir / "best_validation.pt"
 
 @dataclass
 class TrainingConfig:
@@ -55,7 +55,7 @@ class TrainingConfig:
     model_dtype: str = "float32"
 
     # checkpoint args
-    chkpt_dir = str(CHECKPOINT_PATH)
+    chkpt_dir = str(CHECKPOINT_PATH) + "/" + str(exp_name)
     chkpt_interval: int = 1000
     chkpt_maxkeep: int = 3
     chkpt_saved_paths = []
