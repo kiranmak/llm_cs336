@@ -17,7 +17,7 @@ learning_rate() {
     context_len=256
     bs=128
     msteps=$((tokens_to_process / (bs * context_len)))
-    for lr in 1e-4 3e-4 5e-4; do
+    for lr in 7e-4 3e-4 ; do
         echo "Training with Learning Rate: $lr"
         uv run runs/traincmd.py --name "lr_$lr" --tokenfile TinyStoriesV2-GPT4\
          --maxsteps $msteps --batch_size $bs --contextlen $context_len\

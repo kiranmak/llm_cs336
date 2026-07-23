@@ -101,6 +101,7 @@ if __name__ == "__main__":
         input_src_file = None,
         vocab_file = None,
         merge_file = None,
+        exp_name="sweep",
         dataset = str(OUT_PATH   / "TinyStoriesV2-GPT4-train.bin"),
         valid_set = None,
         batch_size=64,  # custom override
@@ -111,10 +112,9 @@ if __name__ == "__main__":
     lr_finder = LRFinder(model, optimizer, criterion )
     lrs, losses = lr_finder.range_test(
                                     cfg=config,
-                                    start_lr=1e-7,
-                                    end_lr=5e-2,
+                                    start_lr=3e-4,
+                                    end_lr=3e-3,
                                     num_iter=150,
                                     device=device
                                 )
     lr_finder.plot(lrs, losses)
-

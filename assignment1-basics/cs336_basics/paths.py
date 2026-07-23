@@ -28,11 +28,9 @@ def get_amptype():
         amp_dtype = torch.bfloat16  # Or torch.float16 if older
         device_type = "cuda"
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
-        amp_dtype = torch.float16   # MPS loves float16, lacks good bf16 support
+        amp_dtype = torch.bfloat16  # Or torch.float16 if older
         device_type = "mps"
     else:
         amp_dtype = torch.bfloat16  # CPU only supports bfloat16 for autocast
         device_type = "cpu"
     return amp_dtype, device_type
-
-

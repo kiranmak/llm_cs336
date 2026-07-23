@@ -25,44 +25,30 @@ def cross_entropy_loss_orig(logits, targets):
         nomin = x_logits, denom = log_sum_exp
         x_logits = logit*one_hot(targets)
         log_sum = sum(exp(logits))
-    Your function should handle the following:
-    • Subtract the largest element for numerical stability.
-    • Cancel out log and exp whenever possible. - open flatten softmax
-    • Handle any additional batch dimensions and return the average
-      across the batch. -- squeeze
-      As with Section 3.2, we assume batch-like dimensions
-      always come first, before the vocabulary size dimension.
-    adapters.run_cross_entropy run uv run pytest -k test_cross_entropy
     """
-    # Cross Entropy = -x_logits + log_sum_exp
     # 1. Log-Sum-Exp Trick for numerical stability
     max_val = torch.max(logits, dim=-1, keepdim=True)[0]
     sum_exp = torch.sum(torch.exp(logits - max_val), dim=-1, keepdim=True)
     log_sum_exp = torch.log(sum_exp) + max_val
 
     """
-    x = F.one_hot(targets, num_classes=logits.size(-1))
-    x_logits = einsum(logits, x.float(), 'b c, b c -> b')
-    #Replace above one-hot + einsum with gather (same math, much faster,
-    # still passes your tests):
+    gather is same as einsum(x.one_hot(targets), x)
     """
     x_logits = logits.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
 
-    # 4. flatten: log_sum_exp frpm (B, 1) to (B,)
     loss = -x_logits + log_sum_exp.squeeze(-1)
-    #perplexity = torch.exp(loss.mean())
-
-    #print()
-    #print(f"Cross-Entropy Loss: {loss.mean().item():.4f}")
-    #print(f"Perplexity:         {perplexity.item():.4f}")
 
     return loss.mean()
 
-def cross_entropy_loss(logits_flat, targets_flat, chunk_size=1000):
+def cross_entropy_loss(logits_flat, targets_flat, chunk_size=None):
     """
     Memory-efficient custom cross entropy using chunked processing
     to prevent MPS/CUDA Out-Of-Memory errors.
     """
+    if chunk_size is None or chunk_size >= logits_flat.size(0):
+        # unchunked path — faster when it fits
+        return cross_entropy_loss_orig(logits_flat, targets_flat)
+
     total_rows = logits_flat.size(0)
     total_loss = 0.0
 

@@ -74,9 +74,10 @@ def conditional_compile(model, device):
         print("CUDA detected: Compiling model graph...")
         return torch.compile(model)
     if device.type == "mps":
-        print("MPS detected: using AOT eager mode for graph compilation.")
-        model = model.to(device)
-        return torch.compile(model, backend="aot_eager")
+        print("MPS detected: skip compilation.")
+        return model
+        #model = model.to(device)
+        #return torch.compile(model, backend="aot_eager")
     else:
         print("CPU detected: using eager mode.")
     return model
@@ -131,7 +132,7 @@ def parse_user_params():
     args_parser.add_argument('--maxsteps',  type=int, default=5000)
     args_parser.add_argument('--warmup',  type=float, default=0.05)
     args_parser.add_argument('--cosine',  type=float, default=1.0)
-    args_parser.add_argument('--lr',  type=float, default=3e-4)
+    args_parser.add_argument('--lr',  type=float, default=1e-3)
 
     if len(sys.argv)==1:
         args_parser.print_help(sys.stderr)
@@ -175,6 +176,4 @@ def parse_user_params():
         lr_min = args.lr * 0.1,
     )
 
-    print("------config.exp_name", config.exp_name)
     return config
-

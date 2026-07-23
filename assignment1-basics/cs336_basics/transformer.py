@@ -91,4 +91,3 @@ class TransformerModel(nn.Module):
         final_norm = self.ln_final(embeddings)
         logits = self.lm_head(final_norm)
         return logits
-

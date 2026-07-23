@@ -29,9 +29,27 @@ from runs.train_helper import (
 from cs336_basics.configs import CheckPtConfig, TrainingConfig
 
 
-def print_msg(step, loss, tok_s, lr, ppl, avg_loss):
-    msg = f"[train] step={step+1} loss={loss:.4f} ppl={ppl:.2f} lr={lr:.6e} avgloss={avg_loss:.4f} tok/s={tok_s:.1f}"
+def print_msg(step, loss, tok_s, lr, ppl, grad_norm):
+    msg = f"[train] step={step+1} loss={loss:.4f} ppl={ppl:.2f} lr={lr:.6e} gradnorm={grad_norm:.4f} tok/s={tok_s:.1f}"
     print(msg)
+
+def diagnostic_helper(X, Y, model):
+    print("--- DIAGNOSTIC DATA CHECK ---")
+    print("X first 5 tokens:", X[0, :5].tolist())
+    print("Y first 5 tokens:", Y[0, :5].tolist())
+    print("-----------------------------")
+
+    # DIAGNOSTIC: Ensure gradients are non-zero (must be after backward)
+    grads = [p.grad.abs().mean().item() for p in model.parameters() if p.grad is not None]
+    n_params_with_grad = sum(p.numel() for p in model.parameters() if p.grad is not None)
+    print(f"  Params w/ gradients: {n_params_with_grad:,}")
+    print(f"  Mean |grad|:         {sum(grads)/len(grads):.6f}  (healthy: ~0.001–0.1)")
+
+    print(f"--------params non zero step={step}--------")
+    for name, p in model.named_parameters():
+        if p.grad is not None:
+            print(f"{name:35s} mean|grad|={p.grad.abs().mean().item():.3e}")
+    print("-------------------------------------")
 
 def validation_step(cfg, valid_mm, best_val, step, exp, model, optimizer, device_type, amp_dtype, device):
     val_t = time.time()
@@ -92,7 +110,7 @@ def main_training_loop(cfg: TrainingConfig):
                             cfg.num_layers,
                             device,
                             dtype=model_dtype).to(device)
-
+    model.lm_head.weight = model.token_embeddings.weight
     optimizer = AdamW(model.parameters(),
                       cfg.lr_max,
                       cfg.weight_decay,
@@ -137,40 +155,20 @@ def main_training_loop(cfg: TrainingConfig):
         for group in optimizer.param_groups: group["lr"] = lr
 
         # 7.2 sample a batch from training data
-        X, Y = get_batch(train_mm,
-                         cfg.batch_size,
-                         cfg.context_length,
-                         device)
-
-        if step == starting_step:
-            print("--- DIAGNOSTIC DATA CHECK ---")
-            print("X first 5 tokens:", X[0, :5].tolist())
-            print("Y first 5 tokens:", Y[0, :5].tolist())
-            print("-----------------------------")
+        X, Y = get_batch(train_mm, cfg.batch_size, cfg.context_length, device)
 
         optimizer.zero_grad(set_to_none=True)
 
         # 7.3. Forward pass: compute predicted logits from inputs
-        
+        # penalize predictions that are wrong
         with torch.amp.autocast(device_type, amp_dtype):
-            # penalize predictions that are wrong
             logits = model(X)
             Xf, Yf = logits.view(-1, cfg.vocab_size), Y.view(-1)
-            loss =  cross_entropy_loss(Xf, Yf)
-        if torch.isnan(loss) or torch.isinf(loss):
-            print(f"  [WARN] step={step}: NaN/Inf loss detected, skipping step")
-            optimizer.zero_grad()
-            continue
+        loss =  cross_entropy_loss(Xf, Yf)
 
         # 7.4. Calculate parameter gradients - back propagation
         loss.backward()
-
-        # DIAGNOSTIC: Ensure gradients are non-zero (must be after backward)
-        if step == starting_step:
-            grads = [p.grad.abs().mean().item() for p in model.parameters() if p.grad is not None]
-            n_params_with_grad = sum(p.numel() for p in model.parameters() if p.grad is not None)
-            print(f"  Params w/ gradients: {n_params_with_grad:,}")
-            print(f"  Mean |grad|:         {sum(grads)/len(grads):.6f}  (healthy: ~0.001–0.1)")
+        #diagnostic_helper(X, Y, model)
 
         # 7.5 Gradient clipping for training stability
         grad_norm = gradient_clipping(model.parameters(), cfg.grad_clip)
@@ -187,14 +185,15 @@ def main_training_loop(cfg: TrainingConfig):
         # 7.7 Periodic logging
         if (step+1) % cfg.log_interval == 0:
             elapsed = time.time() - start_time
-            avg_loss = np.mean(running_loss[-100:]) if len(running_loss) >= 100 else np.mean(running_loss)
-            perplexity = np.exp(avg_loss)
-            
-            # step * B * T
-            tok_s = ((step - starting_step) *\
-                       cfg.batch_size * cfg.context_length)/ elapsed
+            snap = running_loss[-100:] if len(running_loss) >= 100 else running_loss
 
-            print_msg(step, loss, tok_s, lr, perplexity, avg_loss)
+            avg_loss   = np.mean(snap)
+            perplexity = np.exp(avg_loss)
+
+            # step * B * T
+            p_tokens = (step - starting_step) *cfg.batch_size * cfg.context_length
+            tok_s = p_tokens/ elapsed
+            print_msg(step, loss, tok_s, lr, perplexity, grad_norm)
 
             # Pack metrics dictionary
             metrics = {
@@ -251,8 +250,11 @@ if __name__ == "__main__":
         vocab_file = str(OUT_PATH /"TinyStoriesV2-GPT4-train_vocab.json"),
         merge_file = str(OUT_PATH /"TinyStoriesV2-GPT4-train_merges.txt"),
         dataset = str(OUT_PATH   / "TinyStoriesV2-GPT4-train.bin"),
-        valid_set = str(OUT_PATH / "TinyStoriesV2-GPT4-valid.bin"),
-        batch_size=64,  # custom override
+        #valid_set = str(OUT_PATH / "TinyStoriesV2-GPT4-valid.bin"),
+        valid_set = None,
+        exp_name="overfit",
+        batch_size=128,  # custom override
+        lr_max=4e-4,
         resume = False,
     )
 
