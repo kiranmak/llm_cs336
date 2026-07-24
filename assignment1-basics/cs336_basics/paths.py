@@ -19,6 +19,8 @@ def set_device(device:str):
             device = torch.device("cuda")
         elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
             device = torch.device("mps")
+        elif torch.xpu.is_available():
+            device = torch.device("xpu")
         else:
             device = torch.device("cpu")
     return device
@@ -28,9 +30,14 @@ def get_amptype():
         amp_dtype = torch.bfloat16  # Or torch.float16 if older
         device_type = "cuda"
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
-        amp_dtype = torch.bfloat16  # Or torch.float16 if older
+        amp_dtype = torch.bfloat16# MPS M3 works for bf16 
         device_type = "mps"
+    elif torch.xpu.is_available():
+        amp_dtype = torch.bfloat16   # XPU has bf16 support
+        device_type = "xpu"
     else:
         amp_dtype = torch.bfloat16  # CPU only supports bfloat16 for autocast
         device_type = "cpu"
     return amp_dtype, device_type
+
+

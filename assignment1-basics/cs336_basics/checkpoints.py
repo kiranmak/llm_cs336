@@ -27,6 +27,7 @@ def checkpoint_sync(model, optimizer, global_step, chkpt):
             print(f"[chkpt-del] Deleted old checkpoint: {relative}")
 
 def checkpoint_resume(model, optimizer, chkpt):
+
     if not Path(chkpt.dir).exists():
         print(f"Checkpoint directory {chkpt.dir} does not exist.")
         return 0
@@ -39,6 +40,7 @@ def checkpoint_resume(model, optimizer, chkpt):
         return 0
 
     latest_file = max(files, key=lambda x: x.stat().st_mtime)
+
     print(f"\n[chkpt resume] ({latest_file})")
     global_step = load_checkpoint(latest_file, model, optimizer)
 
@@ -46,5 +48,17 @@ def checkpoint_resume(model, optimizer, chkpt):
 
     # Manage rotating history to prevent storage exhaustion
     chkpt.saved_paths.append(str(latest_file))
+    return global_step
+
+def checkpoint_bestval_resume(model, optimizer, best_file):
+
+    if not Path(best_file).exists():
+        print(f"Checkpoint directory {chkpt.dir} does not exist.")
+        return 0
+
+    print(f"\n[chkpt resume] ({best_file})")
+    global_step = load_checkpoint(best_file, model, optimizer)
+
+    print(f"\n[best validation loaded] step {global_step} ")
     return global_step
 

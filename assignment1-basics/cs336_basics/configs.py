@@ -86,9 +86,18 @@ class TrainingConfig:
     def print(self):
         data_dict = asdict(self)
         items = list(data_dict.items())
-        for i in range(0, len(items), 4):
+        for i in range(0, 4):
+            chunk = items[i:i+1]
+            line = " | ".join([f"{key:>14}: {value}" for key, value in chunk])
+            print(line)
+
+        for i in range(4, len(items)-7, 4):
             chunk = items[i:i+4]
-            line = " | ".join([f"{key}: {value}" for key, value in chunk])
+            line = ""
+            #line = " | ".join([f"{key:>8}: {value}" for key, value in chunk])
+            for key, value in chunk:
+                substr = f"{key:>10}: {value}"
+                line = line + f"{substr:<19}" + "| "
             print(line)
 
 

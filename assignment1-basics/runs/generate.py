@@ -3,12 +3,14 @@ import time
 import torch
 from typing import Optional
 from pathlib import Path
+import sys
+import argparse
 
 from cs336_basics.optim import AdamW
 from cs336_basics.paths import CHECKPOINT_PATH
 from cs336_basics.paths import EXP_PATH, OUT_PATH, set_device
-from cs336_basics.configs import ConfigParams 
-from cs336_basics.checkpoints import checkpoint_resume, load_hyperparams
+from cs336_basics.configs import TrainingConfig
+from cs336_basics.checkpoints import checkpoint_bestval_resume
 from cs336_basics.transformer import TransformerModel
 from cs336_basics.bpe_tokenizer import BPETokenizer
 from cs336_basics.experiments_tracker import ExperimentTracker
@@ -47,11 +49,7 @@ def top_p_sampling(scaled_logits: torch.Tensor, top_p: float) -> torch.Tensor:
     next_token = torch.gather(s_indices, dim=-1, index=sampled_sorted_idx)
     return next_token
 
-def get_tokenizer(tokenfile, prompt_text, device):
-    tokens_topic = Path(tokenfile).stem
-
-    vocab = OUT_PATH / f"{tokens_topic}-train_vocab.json"
-    merges = OUT_PATH / f"{tokens_topic}-train_merges.txt"
+def get_tokenizer(vocab, merges, prompt_text, device):
 
     special_tokens=["<|endoftext|>"]
     tokenizer = BPETokenizer.from_files(vocab, merges,
@@ -64,14 +62,29 @@ def get_tokenizer(tokenfile, prompt_text, device):
 
     return token_ids, eos_id, tokenizer
 
-
 def load_running_config():
-    checkpt_params_path = os.path.join(CHECKPOINT_PATH, "hyperparams.json")
 
-    hp, tokenfile = load_hyperparams(checkpt_params_path)
-    hp.show()
-    print(f"  tokenfile: {tokenfile}\n")
-    return hp, tokenfile
+    args_parser = argparse.ArgumentParser()
+    args_parser.add_argument("-e", '--expname', type=str, default=None)
+
+    if len(sys.argv)==1:
+        args_parser.print_help(sys.stderr)
+        sys.exit(1)
+    args = args_parser.parse_args()
+    if args.expname == None:
+        print("Usage: -e, --expname: name of dir with checkpoint and hyperparameters")
+        sys.exit(1)
+
+    dir_path = CHECKPOINT_PATH / args.expname
+
+    if not dir_path.is_dir():
+        print(f"Trained model path {dir_path} does not exist!")
+        exit(0)
+
+    print(f"Directory {dir_path} exists!")
+    loaded_cfg = TrainingConfig.load("hyperparams.json", args.expname)
+    loaded_cfg.print()
+    return args.expname, loaded_cfg
 
 @torch.no_grad()
 def generate_text(
@@ -81,18 +94,15 @@ def generate_text(
         max_new_tokens: int = 128,
         context_length: int = 256,
         generation_id: int =0,
-        temperature: float=1.0, top_p:float =1.0
+        temperature: float=1.0,
+        top_p:float =1.0,
+        expname: str= None,
         )-> torch.Tensor:
 
     p_len = prompt_token_ids.shape[1]
     request_start_time = time.time()
 
-    exp = ExperimentTracker(
-         log_dir=EXP_PATH,
-         service_name=tokenfile,
-         config=None,  # dataclass will be serialized
-         mode="decode",
-     )
+    exp = ExperimentTracker(expname, mode="decode")
 
     if prompt_token_ids.dtype != torch.long:
         prompt_token_ids= pprompt_token_ids.to(torch.long)
@@ -177,9 +187,9 @@ def generate_text(
     return p_tokens
 
 def decoding(prompt_text:str,
-             hp: ConfigParams,
+             hp: TrainingConfig,
+             expname: str,
              gen: int,
-             tokenfile:str,
              temperature: float,
              top_p: float,
              device=None):
@@ -187,13 +197,12 @@ def decoding(prompt_text:str,
     from runs.train import  torch_dtype_from_string
     device = set_device(device)
 
-    token_ids, eos_id, tokenizer = get_tokenizer(tokenfile,
+    token_ids, eos_id, tokenizer = get_tokenizer(hp.vocab_file,
+                                                 hp.merge_file,
                                                  prompt_text, device)
 
     # ---- 2) Build model (match training config) ----
-    #model_dtype = cfg.model.torch_dtype.lower()
-    model_dtype = "float32"
-    dtype = torch_dtype_from_string(model_dtype)
+    dtype = torch_dtype_from_string(hp.model_dtype)
 
     model = TransformerModel(
         hp.vocab_size,
@@ -207,9 +216,10 @@ def decoding(prompt_text:str,
         dtype,
     ).to(device)
 
+    model.lm_head.weight = model.token_embeddings.weight
     optimizer = AdamW(model.parameters())
 
-    checkpoint_resume(model, optimizer, hp.checkpoint)
+    checkpoint_bestval_resume(model, optimizer, hp.best_chkpt_file)
 
     token_ids = generate_text(
         model=model,
@@ -219,7 +229,8 @@ def decoding(prompt_text:str,
         context_length=hp.context_length,
         generation_id=gen,
         temperature=temperature,
-        top_p=top_p
+        top_p=top_p,
+        expname=expname
     )
 
 
@@ -228,8 +239,8 @@ def decoding(prompt_text:str,
 
 
 if __name__ == "__main__":
-    prompt_text = "Once, there was a little boy who was not feeling good"
-    hyperparams, tokenfile = load_running_config()
-    decoding(prompt_text, hyperparams,
-             gen=0, tokenfile=tokenfile,
+    prompt_text = "Once, there was a little boy "
+    expname, hyperparams = load_running_config()
+    decoding(prompt_text, hyperparams,expname,
+             gen=0,
              temperature=1.0, top_p=0.9, device=None)

@@ -20,6 +20,7 @@ def mini_training_proc():
         context_length= 32,
         eval_interval = 100,
         log_interval = 50,
+        exp_name="hello",
         resume = True,
     )
     encode_file_parallel(
