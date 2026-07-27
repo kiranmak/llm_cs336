@@ -143,9 +143,10 @@ class MultiheadSelfAttention(torch.nn.Module):
         # Causal masking 1. Create a matrix of ones
         # diagonal=1 excludes the main diagonal (j == i)
         seq_len = x.shape[-2]
-        #causal_mask = torch.triu(ones, diagonal=1).bool()
-        ones = torch.ones(seq_len, seq_len, device=x.device)
-        causal_mask = torch.tril(ones).bool()
+        # 2d to 4d change for broadcasting across batch and heads
+        causal_mask = torch.tril(
+            torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool)
+        ).unsqueeze(0).unsqueeze(0) # (1, 1, seq_len, seq_len)
 
         attn_out = scaled_dot_product_attention(Q, K, V, causal_mask)
         attn_out = rearrange(attn_out,

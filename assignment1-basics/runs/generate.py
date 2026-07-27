@@ -203,6 +203,11 @@ def decoding(prompt_text:str,
                                                  hp.merge_file,
                                                  prompt_text, device)
 
+    test_tokens = tokenizer.encode("Once upon a time")
+    decoded_str = tokenizer.decode(test_tokens)
+    print(repr(decoded_str))
+    # If it prints 'Onceuponatime' or contains 'Ġ' symbols instead of real spaces,
+    # your tokenizer decode() method is missing the byte-to-unicode inversion!
     # ---- 2) Build model (match training config) ----
     dtype = torch_dtype_from_string(hp.model_dtype)
 
@@ -218,7 +223,7 @@ def decoding(prompt_text:str,
         dtype,
     ).to(device)
 
-    model.lm_head.weight = model.token_embeddings.weight
+    #model.lm_head.weight = model.token_embeddings.weight
     optimizer = AdamW(model.parameters())
 
     checkpoint_bestval_resume(model, optimizer, hp.best_chkpt_file)
