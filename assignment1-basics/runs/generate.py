@@ -66,6 +66,8 @@ def load_running_config():
 
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("-e", '--expname', type=str, default=None)
+    args_parser.add_argument("-t", '--temp', type=float, default=1.0)
+    args_parser.add_argument("-p", '--top_p', type=float, default=1.0)
 
     if len(sys.argv)==1:
         args_parser.print_help(sys.stderr)
@@ -84,7 +86,7 @@ def load_running_config():
     print(f"Directory {dir_path} exists!")
     loaded_cfg = TrainingConfig.load("hyperparams.json", args.expname)
     loaded_cfg.print()
-    return args.expname, loaded_cfg
+    return args.temp, args.top_p, args.expname, loaded_cfg
 
 @torch.no_grad()
 def generate_text(
@@ -239,8 +241,8 @@ def decoding(prompt_text:str,
 
 
 if __name__ == "__main__":
-    prompt_text = "Once, there was a little boy "
-    expname, hyperparams = load_running_config()
+    prompt_text = "Once upon a time"
+    temp, top_p, expname, hyperparams = load_running_config()
     decoding(prompt_text, hyperparams,expname,
              gen=0,
-             temperature=1.0, top_p=0.9, device=None)
+             temperature=temp, top_p=top_p, device=None)

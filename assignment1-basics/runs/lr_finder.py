@@ -68,7 +68,10 @@ class LRFinder:
             # Apply EMA smoothing to the loss
             running_loss = smooth_beta * running_loss + (1 - smooth_beta) * loss.item()
             smoothed_loss = running_loss / (1 - smooth_beta ** (i + 1)) # Bias correction
-            print(f"step: {i} lr: {current_lr:.2e} loss: {loss.item():.4f} running loss: {running_loss:.4f} smoothed_loss: {smoothed_loss:.4f}")
+            if (i % 10) == 0:
+                msg =  f"step: {i} lr: {current_lr:.2e} loss: {loss.item():.4f} "
+                msg += f"running loss: {running_loss:.4f} smoothed_loss: {smoothed_loss:.4f}"
+                print(msg)
 
             lrs.append(current_lr)
             losses.append(smoothed_loss)

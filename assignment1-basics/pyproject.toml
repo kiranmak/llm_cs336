@@ -5,6 +5,9 @@ description = "CS336 Assignment 1"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "torch>=2.4.0",
+    "pytorch-triton-xpu; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "triton-xpu; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "einops>=0.8",      # tensor operations
     "einx>=0.4",        # more general tensor operations
     "jaxtyping>=0.3",   # type hints for pytorch/jax/numpy
@@ -14,13 +17,11 @@ dependencies = [
     "pytest-timeout",
     "regex>=2026.3.32", # more powerful regex than the builtin `re` module
     "tiktoken>=0.12.0",
-   "torch>=2.9.1",
    "tqdm",
     "wandb>=0.25",
     "ty>=0.0.26",
     "ruff>=0.15.8",
     "matplotlib",
-   "torch>=2.9.1",
     "tensorboard",
     "tbparse>=0.0.9",
     "seaborn>=0.13.2",
@@ -28,27 +29,10 @@ dependencies = [
     "openvino",
 ]
 
+
 [build-system]
 requires = ["uv_build>=0.11.0,<0.12.0"]
 build-backend = "uv_build"
-[tool.uv.sources]
-torch = [
-  { index = "pytorch-xpu"},
-]
-torchvision = [
-  { index = "pytorch-xpu"},
-]
-pytorch-triton-xpu = [
-  { index = "pytorch-xpu"},
-]
-
-#[[tool.uv.index]]
-#url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-#default = true
-
-[[tool.uv.index]]
-name = "pytorch-xpu"
-url = "https://download.pytorch.org/whl/xpu"
 
 [tool.uv.build-backend]
 module-name = "cs336_basics"
@@ -57,6 +41,33 @@ module-root = ""
 [tool.uv]
 package = true
 python-preference = "managed"
+
+# Constrain uv's resolver to ONLY solve for these two platforms
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+# Declare the PyTorch XPU index as explicit
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"
+explicit = true
+
+# Direct Linux torch resolution to the XPU index
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-xpu", marker = "sys_platform == 'linux'" },
+]
+triton-xpu = [
+    { index = "pytorch-xpu", marker = "sys_platform == 'linux'" },
+]
+pytorch-triton-xpu = [
+    { index = "pytorch-xpu", marker = "sys_platform == 'linux'" },
+]
+
+[tool.setuptools.packages.find]
+include = ["cs336_basics*"]
 
 [tool.pytest.ini_options]
 log_cli = true
@@ -90,3 +101,4 @@ args = [
   { name = "script", positional = true, required = true, help = "The python script to run" },
   { name = "args", positional = true, multiple = true, help = "Arguments to pass to the script" }
 ]
+

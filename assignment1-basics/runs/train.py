@@ -141,6 +141,8 @@ def main_training_loop(cfg: TrainingConfig):
     model.train()
 
     print(f"curr_start/total steps: {starting_step}/{cfg.max_steps}\n")
+    micro_batch_size = 64  # Physical batch that easily fits in 24GB RAM
+    grad_accum_steps = cfg.batch_size // micro_batch_size  # = 2
 
     for step in range(starting_step, cfg.max_steps):
         step_start = time.time()
@@ -153,21 +155,24 @@ def main_training_loop(cfg: TrainingConfig):
             cfg.cosine_cycle_iters
         )
         for group in optimizer.param_groups: group["lr"] = lr
-
-        # 7.2 sample a batch from training data
-        X, Y = get_batch(train_mm, cfg.batch_size, cfg.context_length, device)
-
         optimizer.zero_grad(set_to_none=True)
+        accum_loss = 0.0
+        for accum_step in range(grad_accum_steps):
+            # 7.2 sample a batch from training data
+            X, Y = get_batch(train_mm, micro_batch_size, cfg.context_length, device)
 
-        # 7.3. Forward pass: compute predicted logits from inputs
-        # penalize predictions that are wrong
-        with torch.amp.autocast(device_type, amp_dtype):
-            logits = model(X)
-            Xf, Yf = logits.view(-1, cfg.vocab_size), Y.view(-1)
-        loss =  cross_entropy_loss(Xf, Yf)
 
-        # 7.4. Calculate parameter gradients - back propagation
-        loss.backward()
+            # 7.3. Forward pass: compute predicted logits from inputs
+            # penalize predictions that are wrong
+            with torch.amp.autocast(device_type, amp_dtype):
+                logits = model(X)
+                Xf, Yf = logits.view(-1, cfg.vocab_size), Y.view(-1)
+            loss =  cross_entropy_loss(Xf, Yf)
+            accum_loss += loss.item()
+
+            # Accumulate gradients (no step yet)
+            (loss / grad_accum_steps).backward()  # only the backward pass gets scaled
+
         #diagnostic_helper(X, Y, model)
 
         # 7.5 Gradient clipping for training stability
@@ -177,7 +182,7 @@ def main_training_loop(cfg: TrainingConfig):
         optimizer.step()
 
         # Track loss
-        running_loss.append(loss.item())
+        running_loss.append(accum_loss / grad_accum_steps)  # true average loss across 
 
         if (step + 1) % chkpt.interval == 0:
             checkpoint_sync(model, optimizer, step+1, chkpt)
