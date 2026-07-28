@@ -167,11 +167,14 @@ def main_training_loop(cfg: TrainingConfig):
             with torch.amp.autocast(device_type, amp_dtype):
                 logits = model(X)
                 Xf, Yf = logits.view(-1, cfg.vocab_size), Y.view(-1)
-            loss =  cross_entropy_loss(Xf, Yf)
+                loss =  cross_entropy_loss(Xf, Yf)
+            loss = cross_entropy_loss(Xf, Yf)
+            scaled_loss = loss / grad_accum_steps
+            # Accumulate gradients (no step yet). backward only on scaled loss
+            scaled_loss.backward()
             accum_loss += loss.item()
-
-            # Accumulate gradients (no step yet)
-            (loss / grad_accum_steps).backward()  # only the backward pass gets scaled
+            # Explicitly delete loss tensors from local memory scope
+            del loss, scaled_loss, logits, Xf, Yf
 
         #diagnostic_helper(X, Y, model)
 
@@ -182,23 +185,28 @@ def main_training_loop(cfg: TrainingConfig):
         optimizer.step()
 
         # Track loss
-        running_loss.append(accum_loss / grad_accum_steps)  # true average loss across 
+        running_loss.append(accum_loss / grad_accum_steps)  # true average loss across
+        if len(running_loss) > 100:
+            running_loss.pop(0)
 
         if (step + 1) % chkpt.interval == 0:
             checkpoint_sync(model, optimizer, step+1, chkpt)
 
+        # Clear MPS memory cache every 50 steps
+        if (step + 1) % 100 == 0 and device.type == "mps":
+            torch.mps.empty_cache()
+
         # 7.7 Periodic logging
         if (step+1) % cfg.log_interval == 0:
             elapsed = time.time() - start_time
-            snap = running_loss[-100:] if len(running_loss) >= 100 else running_loss
-
-            avg_loss   = np.mean(snap)
+            #snap = running_loss[-100:] if len(running_loss) >= 100 else running_loss
+            avg_loss   = np.mean(running_loss)
             perplexity = np.exp(avg_loss)
 
             # step * B * T
             p_tokens = (step - starting_step) *cfg.batch_size * cfg.context_length
             tok_s = p_tokens/ elapsed
-            print_msg(step, loss, tok_s, lr, perplexity, grad_norm)
+            print_msg(step, accum_loss, tok_s, lr, perplexity, grad_norm)
 
             # Pack metrics dictionary
             metrics = {
@@ -211,6 +219,7 @@ def main_training_loop(cfg: TrainingConfig):
                 "perf/sec_per_step": time.time() - step_start
             }
             exp.log(step+1, metrics)
+            torch.mps.empty_cache()
 
         # 7.8 Periodic evaluation on validation set
         if cfg.valid_set and (step + 1) % cfg.eval_interval == 0:

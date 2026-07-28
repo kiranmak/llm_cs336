@@ -107,7 +107,7 @@ def generate_text(
     exp = ExperimentTracker(expname, mode="decode")
 
     if prompt_token_ids.dtype != torch.long:
-        prompt_token_ids= pprompt_token_ids.to(torch.long)
+        prompt_token_ids = prompt_token_ids.to(torch.long)
 
     if max_new_tokens < 0:
         raise ValueError(
@@ -135,7 +135,8 @@ def generate_text(
         logits = model(input_context)
 
         token_latency_ms = (time.time() - token_start_time) * 1000
-        next_token_logits = logits[:, -1, :]
+        # [batch, seq, features]
+        next_token_logits = logits[:, -1, :] # last step of every batch, all features
 
         # Always track highest probability for logging safely
         probs_for_logging = torch.softmax(next_token_logits, dim=-1)
@@ -143,11 +144,13 @@ def generate_text(
 
         if 0.0 < temperature <= 1.0:
             scaled_logits = next_token_logits / temperature
-            probs = torch.softmax(scaled_logits, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1)
 
             if top_p < 1.0:
-                next_token = top_p_sampling(probs, top_p)
+                # top_p_sampling applies softmax internally — pass scaled logits, NOT probs
+                next_token = top_p_sampling(scaled_logits, top_p)
+            else:
+                probs = torch.softmax(scaled_logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1)
         else: # 0 < temperature < 1.0:
             probs = torch.softmax(next_token_logits, dim=-1)
             next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
@@ -203,9 +206,6 @@ def decoding(prompt_text:str,
                                                  hp.merge_file,
                                                  prompt_text, device)
 
-    test_tokens = tokenizer.encode("Once upon a time")
-    decoded_str = tokenizer.decode(test_tokens)
-    print(repr(decoded_str))
     # If it prints 'Onceuponatime' or contains 'Ġ' symbols instead of real spaces,
     # your tokenizer decode() method is missing the byte-to-unicode inversion!
     # ---- 2) Build model (match training config) ----
@@ -223,7 +223,7 @@ def decoding(prompt_text:str,
         dtype,
     ).to(device)
 
-    #model.lm_head.weight = model.token_embeddings.weight
+    model.lm_head.weight = model.token_embeddings.weight
     optimizer = AdamW(model.parameters())
 
     checkpoint_bestval_resume(model, optimizer, hp.best_chkpt_file)
